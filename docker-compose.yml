@@ -1,0 +1,20 @@
+services:
+  turingos:
+    build: .
+    container_name: turingos
+    working_dir: /workspace
+    command: make run
+    tty: true
+    stdin_open: true
+    volumes:
+      - .:/workspace
+      - /tmp:/tmp
+
+  visualizer:
+    build: .
+    container_name: turingos-visualizer
+    working_dir: /workspace
+    command: python3 viz/visualizer.py
+    volumes:
+      - .:/workspace
+      - /tmp:/tmp

@@ -162,3 +162,7 @@ Added `tests/fs/test_fs_sector.c` and integrated it into `tests/run_tests.sh` to
 Added in-memory directory refresh logic that reads the first 2048 bytes (64 x 32-byte entries) and marks active records where status byte is `0x00`.
 Implemented `fs_open()` name matching against CP/M 8.3 directory entries by normalizing input names to uppercase, space-padded 11-byte form, then returning a handle from a 16-slot static open table.
 Extended `tests/fs/test_fs_sector.c` to create active directory entries on disk and verify `fs_open()` success for existing files, rejection for missing/invalid names, and handle-range behavior.
+## [2026-03-30] fs — Sequential read/write through allocation map
+Implemented per-handle file cursor state and wired `fs_read()` to resolve sequential reads through directory allocation-map entries (`entry[16..31]`) in 256-byte sector chunks.
+Implemented `fs_write()` with on-demand free-sector allocation, read-modify-write for partial sectors, allocation map updates, and directory entry persistence; file size tracking uses `entry[15]` as sectors used for the current extent.
+Extended `tests/fs/test_fs_sector.c` with a `DATA.BIN` round-trip using `fs_write` then `fs_read`, verifying exact payload recovery and EOF behavior once the handle cursor reaches file size.

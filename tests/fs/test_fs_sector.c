@@ -61,11 +61,15 @@ static void write_dir_entry(FILE *fp,
 int main(void) {
     uint8_t write_buf[BYTES_PER_SECTOR];
     uint8_t read_buf[BYTES_PER_SECTOR];
+    uint8_t file_write[700];
+    uint8_t file_read[700];
     FILE *bad_fp;
     FILE *fp;
     const char *bad_path = "build/tests/fs/bad_disk.img";
     int h1;
     int h2;
+    int hw;
+    int hr;
     unsigned int i;
 
     create_blank_disk(TEST_DISK_PATH);
@@ -143,6 +147,49 @@ int main(void) {
     }
     fs_close(h1);
     fs_close(h2);
+
+    /* Sequential fs_write/fs_read via allocation map. */
+    fp = fopen(TEST_DISK_PATH, "r+b");
+    if (fp == NULL) {
+        fail("cannot reopen disk for DATA.BIN directory setup");
+    }
+    write_dir_entry(fp, 2u, "DATA", "BIN");
+    if (fclose(fp) != 0) {
+        fail("cannot close disk before write/read test");
+    }
+    if (fs_init(TEST_DISK_PATH) != 0) {
+        fail("fs_init should succeed before fs_write/fs_read test");
+    }
+    for (i = 0; i < sizeof(file_write); ++i) {
+        file_write[i] = (uint8_t)((i * 3u) & 0xFFu);
+    }
+    hw = fs_open("DATA.BIN");
+    if (hw < 0) {
+        fail("fs_open DATA.BIN for write failed");
+    }
+    if (fs_write(hw, file_write, (int)sizeof(file_write)) != (int)sizeof(file_write)) {
+        fail("fs_write should write full payload");
+    }
+    fs_close(hw);
+
+    hr = fs_open("DATA.BIN");
+    if (hr < 0) {
+        fail("fs_open DATA.BIN for read failed");
+    }
+    memset(file_read, 0, sizeof(file_read));
+    if (fs_read(hr, file_read, (int)sizeof(file_read)) != (int)sizeof(file_read)) {
+        fail("fs_read should read full payload");
+    }
+    if (memcmp(file_write, file_read, sizeof(file_write)) != 0) {
+        fail("fs_read payload mismatch");
+    }
+    if (fs_read(hr, file_read, 68) != 68) {
+        fail("fs_read should expose padded tail up to sector boundary");
+    }
+    if (fs_read(hr, file_read, 1) != 0) {
+        fail("fs_read should report EOF once extent is exhausted");
+    }
+    fs_close(hr);
 
     (void)TOTAL_BYTES;
     puts("PASS: test_fs_sector");

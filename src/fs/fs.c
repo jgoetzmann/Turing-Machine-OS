@@ -19,6 +19,7 @@ static uint8_t g_dir_raw[FS_DIR_BYTES];
 static uint8_t g_dir_active[FS_DIR_ENTRIES];
 static uint8_t g_open_dir_index[FS_OPEN_MAX];
 static uint8_t g_open_in_use[FS_OPEN_MAX];
+static uint16_t g_open_pos[FS_OPEN_MAX];
 
 static long fs_sector_offset(uint8_t track, uint8_t sector) {
     unsigned long linear_sector = ((unsigned long)track * FS_SECTORS_PER_TRACK) +
@@ -31,7 +32,24 @@ static void fs_reset_open_table(void) {
     for (i = 0; i < FS_OPEN_MAX; ++i) {
         g_open_in_use[i] = 0u;
         g_open_dir_index[i] = 0u;
+        g_open_pos[i] = 0u;
     }
+}
+
+static int fs_linear_to_track_sector(uint16_t linear, uint8_t *track, uint8_t *sector) {
+    if (track == NULL || sector == NULL) {
+        return -1;
+    }
+    if (linear >= (uint16_t)(FS_TRACKS * FS_SECTORS_PER_TRACK)) {
+        return -1;
+    }
+    *track = (uint8_t)(linear / FS_SECTORS_PER_TRACK);
+    *sector = (uint8_t)((linear % FS_SECTORS_PER_TRACK) + 1u);
+    return 0;
+}
+
+static uint16_t fs_track_sector_to_linear(uint8_t track, uint8_t sector) {
+    return (uint16_t)((uint16_t)track * FS_SECTORS_PER_TRACK + (uint16_t)(sector - 1u));
 }
 
 static int fs_build_cpm_name(const char *name, uint8_t out_name[11]) {
@@ -93,6 +111,55 @@ static int fs_refresh_directory(void) {
         g_dir_active[i] = (status == 0x00u) ? 1u : 0u;
     }
     return 0;
+}
+
+static int fs_persist_directory_entry(uint8_t dir_index) {
+    long offset;
+    if (g_disk_fp == NULL || dir_index >= FS_DIR_ENTRIES) {
+        return -1;
+    }
+    offset = (long)dir_index * FS_DIR_ENTRY_SIZE;
+    if (fseek(g_disk_fp, offset, SEEK_SET) != 0) {
+        return -1;
+    }
+    if (fwrite(&g_dir_raw[offset], 1u, FS_DIR_ENTRY_SIZE, g_disk_fp) != FS_DIR_ENTRY_SIZE) {
+        return -1;
+    }
+    if (fflush(g_disk_fp) != 0) {
+        return -1;
+    }
+    return 0;
+}
+
+static int fs_sector_in_use(uint16_t linear_sector) {
+    unsigned int i;
+    unsigned int j;
+    for (i = 0u; i < FS_DIR_ENTRIES; ++i) {
+        const uint8_t *entry = &g_dir_raw[i * FS_DIR_ENTRY_SIZE];
+        if (g_dir_active[i] == 0u) {
+            continue;
+        }
+        for (j = 0u; j < 16u; ++j) {
+            uint8_t alloc = entry[16u + j];
+            if (alloc == 0u) {
+                continue;
+            }
+            if ((uint16_t)(alloc - 1u) == linear_sector) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int fs_alloc_free_sector(uint8_t *track, uint8_t *sector) {
+    uint16_t linear;
+    for (linear = 8u; linear < (uint16_t)(FS_TRACKS * FS_SECTORS_PER_TRACK); ++linear) {
+        if (fs_sector_in_use(linear) == 0) {
+            return fs_linear_to_track_sector(linear, track, sector);
+        }
+    }
+    return -1;
 }
 
 int fs_init(const char *disk_image_path) {
@@ -162,6 +229,7 @@ int fs_open(const char *name) {
             if (g_open_in_use[h] == 0u) {
                 g_open_in_use[h] = 1u;
                 g_open_dir_index[h] = (uint8_t)i;
+                g_open_pos[h] = 0u;
                 return (int)h;
             }
         }
@@ -171,17 +239,142 @@ int fs_open(const char *name) {
 }
 
 int fs_read(int fh, uint8_t *buf, int len) {
-    (void)fh;
-    (void)buf;
-    (void)len;
-    return -1;
+    uint8_t *entry;
+    uint16_t pos;
+    uint16_t size_bytes;
+    int total = 0;
+    uint8_t sector_buf[FS_BYTES_PER_SECTOR];
+
+    if (fh < 0 || fh >= (int)FS_OPEN_MAX || buf == NULL || len < 0) {
+        return -1;
+    }
+    if (g_open_in_use[(unsigned int)fh] == 0u) {
+        return -1;
+    }
+    if (len == 0) {
+        return 0;
+    }
+
+    if (fs_refresh_directory() != 0) {
+        return -1;
+    }
+
+    entry = &g_dir_raw[g_open_dir_index[(unsigned int)fh] * FS_DIR_ENTRY_SIZE];
+    size_bytes = (uint16_t)entry[15] * FS_BYTES_PER_SECTOR;
+    pos = g_open_pos[(unsigned int)fh];
+    if (pos >= size_bytes) {
+        return 0;
+    }
+
+    while (total < len && pos < size_bytes) {
+        uint8_t slot = (uint8_t)(pos / FS_BYTES_PER_SECTOR);
+        uint8_t in_sector = (uint8_t)(pos % FS_BYTES_PER_SECTOR);
+        uint8_t alloc = entry[16u + slot];
+        uint8_t track;
+        uint8_t sector;
+        int chunk;
+        int left_file = (int)(size_bytes - pos);
+        int left_sector = (int)(FS_BYTES_PER_SECTOR - in_sector);
+
+        if (slot >= 16u || alloc == 0u) {
+            break;
+        }
+        if (fs_linear_to_track_sector((uint16_t)(alloc - 1u), &track, &sector) != 0) {
+            break;
+        }
+        if (fs_read_sector(track, sector, sector_buf) != 0) {
+            return (total > 0) ? total : -1;
+        }
+
+        chunk = len - total;
+        if (chunk > left_file) {
+            chunk = left_file;
+        }
+        if (chunk > left_sector) {
+            chunk = left_sector;
+        }
+        memcpy(&buf[total], &sector_buf[in_sector], (size_t)chunk);
+        total += chunk;
+        pos = (uint16_t)(pos + (uint16_t)chunk);
+    }
+
+    g_open_pos[(unsigned int)fh] = pos;
+    return total;
 }
 
 int fs_write(int fh, const uint8_t *buf, int len) {
-    (void)fh;
-    (void)buf;
-    (void)len;
-    return -1;
+    uint8_t *entry;
+    uint16_t pos;
+    int total = 0;
+    uint8_t sector_buf[FS_BYTES_PER_SECTOR];
+
+    if (fh < 0 || fh >= (int)FS_OPEN_MAX || buf == NULL || len < 0) {
+        return -1;
+    }
+    if (g_open_in_use[(unsigned int)fh] == 0u) {
+        return -1;
+    }
+    if (len == 0) {
+        return 0;
+    }
+
+    if (fs_refresh_directory() != 0) {
+        return -1;
+    }
+
+    entry = &g_dir_raw[g_open_dir_index[(unsigned int)fh] * FS_DIR_ENTRY_SIZE];
+    pos = g_open_pos[(unsigned int)fh];
+
+    while (total < len) {
+        uint8_t slot = (uint8_t)(pos / FS_BYTES_PER_SECTOR);
+        uint8_t in_sector = (uint8_t)(pos % FS_BYTES_PER_SECTOR);
+        uint8_t alloc = 0u;
+        uint8_t track;
+        uint8_t sector;
+        int chunk = len - total;
+
+        if (slot >= 16u) {
+            break;
+        }
+
+        alloc = entry[16u + slot];
+        if (alloc == 0u) {
+            if (fs_alloc_free_sector(&track, &sector) != 0) {
+                break;
+            }
+            alloc = (uint8_t)(fs_track_sector_to_linear(track, sector) + 1u);
+            entry[16u + slot] = alloc;
+            memset(sector_buf, 0, sizeof(sector_buf));
+        } else {
+            if (fs_linear_to_track_sector((uint16_t)(alloc - 1u), &track, &sector) != 0) {
+                return (total > 0) ? total : -1;
+            }
+            if (fs_read_sector(track, sector, sector_buf) != 0) {
+                return (total > 0) ? total : -1;
+            }
+        }
+
+        if (chunk > (int)(FS_BYTES_PER_SECTOR - in_sector)) {
+            chunk = (int)(FS_BYTES_PER_SECTOR - in_sector);
+        }
+        memcpy(&sector_buf[in_sector], &buf[total], (size_t)chunk);
+        if (fs_write_sector(track, sector, sector_buf) != 0) {
+            return (total > 0) ? total : -1;
+        }
+        total += chunk;
+        pos = (uint16_t)(pos + (uint16_t)chunk);
+    }
+
+    if (pos > (uint16_t)entry[15] * FS_BYTES_PER_SECTOR) {
+        uint8_t sectors_used = (uint8_t)((pos + (FS_BYTES_PER_SECTOR - 1u)) / FS_BYTES_PER_SECTOR);
+        entry[15] = sectors_used;
+    }
+
+    g_open_pos[(unsigned int)fh] = pos;
+    if (fs_persist_directory_entry(g_open_dir_index[(unsigned int)fh]) != 0) {
+        return (total > 0) ? total : -1;
+    }
+    return total;
 }
 
 void fs_close(int fh) {
@@ -190,6 +383,7 @@ void fs_close(int fh) {
     }
     g_open_in_use[(unsigned int)fh] = 0u;
     g_open_dir_index[(unsigned int)fh] = 0u;
+    g_open_pos[(unsigned int)fh] = 0u;
 }
 
 int fs_list(char names[][13], int max) {

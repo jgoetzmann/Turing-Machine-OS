@@ -69,8 +69,8 @@
 - [x] P1-46 Implement internal `fs_read_sector(track, sector, buf)` and `fs_write_sector`
 - [x] P1-47 Implement directory parsing — scan track 0 for active entries
 - [x] P1-48 Implement `fs_open()` — find file by name, return handle
-- [ ] P1-49 Implement `fs_read()` — sequential sector read via allocation map
-- [ ] P1-50 Implement `fs_write()` — sequential sector write, allocate blocks
+- [x] P1-49 Implement `fs_read()` — sequential sector read via allocation map
+- [x] P1-50 Implement `fs_write()` — sequential sector write, allocate blocks
 - [ ] P1-51 Implement `fs_close()`, `fs_list()`, `fs_delete()`, `fs_exists()`
 - [ ] P1-52 Implement `fs_flush()` — write all dirty sectors back to disk image
 - [ ] P1-53 Unit tests: create file, write data, close, reopen, read back, compare

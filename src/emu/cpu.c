@@ -185,6 +185,13 @@ static void logic_flags(cpu_t *cpu, uint8_t result) {
     set_szp(cpu, result);
 }
 
+static void logic_flags_and(cpu_t *cpu, uint8_t result) {
+    cpu->a = result;
+    cpu->flags &= (uint8_t)~FLAG_CY;
+    cpu->flags |= FLAG_AC; /* 8080 ANA/ANI set AC */
+    set_szp(cpu, result);
+}
+
 static void cmp_flags_only(cpu_t *cpu, uint8_t value) {
     const uint8_t a = cpu->a;
     const uint16_t sub = (uint16_t)value;
@@ -458,7 +465,7 @@ void cpu_step(cpu_t *cpu) {
                 break;
 
             case 0xE6u: /* ANI d8 */
-                logic_flags(cpu, (uint8_t)(cpu->a & mem_read(next_pc)));
+                logic_flags_and(cpu, (uint8_t)(cpu->a & mem_read(next_pc)));
                 cpu->pc = (uint16_t)(next_pc + 1u);
                 break;
             case 0xEEu: /* XRI d8 */
@@ -563,7 +570,7 @@ void cpu_step(cpu_t *cpu) {
                     }
                     cpu->pc = next_pc;
                 } else if ((opcode >= 0xA0u) && (opcode <= 0xA7u)) { /* ANA r */
-                    logic_flags(cpu, (uint8_t)(cpu->a & read_reg_by_code(cpu, (uint8_t)(opcode & 0x07u))));
+                    logic_flags_and(cpu, (uint8_t)(cpu->a & read_reg_by_code(cpu, (uint8_t)(opcode & 0x07u))));
                     cpu->pc = next_pc;
                 } else if ((opcode >= 0xA8u) && (opcode <= 0xAFu)) { /* XRA r */
                     logic_flags(cpu, (uint8_t)(cpu->a ^ read_reg_by_code(cpu, (uint8_t)(opcode & 0x07u))));

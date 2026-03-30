@@ -5,6 +5,7 @@
 #include <stdlib.h>
 
 #define FLAG_Z  0x40u
+#define FLAG_AC 0x10u
 #define FLAG_CY 0x01u
 
 static void assert_u8(const char *label, uint8_t expected, uint8_t actual) {
@@ -27,8 +28,8 @@ int main(void) {
     cpu_step(&cpu);
     cpu_step(&cpu);
     assert_u8("ANI", 0x00u, cpu.a);
-    if ((cpu.flags & FLAG_Z) == 0u || (cpu.flags & FLAG_CY) != 0u) {
-        fprintf(stderr, "FAIL: ANI expected Z and cleared CY\n");
+    if ((cpu.flags & FLAG_Z) == 0u || (cpu.flags & FLAG_CY) != 0u || (cpu.flags & FLAG_AC) == 0u) {
+        fprintf(stderr, "FAIL: ANI expected Z, AC set, CY clear\n");
         return 1;
     }
 
@@ -40,6 +41,10 @@ int main(void) {
     cpu_step(&cpu);
     cpu_step(&cpu);
     assert_u8("XRI", 0x55u, cpu.a);
+    if ((cpu.flags & FLAG_AC) != 0u || (cpu.flags & FLAG_CY) != 0u) {
+        fprintf(stderr, "FAIL: XRI expected AC and CY clear\n");
+        return 1;
+    }
 
     /* MVI A,0x0C ; ORI 0x30 => A=0x3C */
     mem_write(0x0008u, 0x3Eu);
@@ -49,6 +54,10 @@ int main(void) {
     cpu_step(&cpu);
     cpu_step(&cpu);
     assert_u8("ORI", 0x3Cu, cpu.a);
+    if ((cpu.flags & FLAG_AC) != 0u || (cpu.flags & FLAG_CY) != 0u) {
+        fprintf(stderr, "FAIL: ORI expected AC and CY clear\n");
+        return 1;
+    }
 
     /* CMP: A=0x3C, MVI B,0x3C ; CMP B => Z, A unchanged */
     mem_write(0x000Cu, 0x06u);

@@ -1,4 +1,0 @@
-[toolchain]
-channel = "nightly-2025-01-15"
-components = ["rust-src", "rustfmt", "clippy"]
-targets = ["i686-unknown-none"]

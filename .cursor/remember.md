@@ -180,3 +180,6 @@ No additional FS test binary was required because the existing FS test suite alr
 ## [2026-03-30] shell — Command parsing foundation for Phase 2
 Replaced the shell stub with a concrete shell core API in `src/shell/shell.c`/`shell.h`: prompt rendering (`A> `), command parsing to a typed command enum, argument capture, and minimal render behavior (`help`, unknown command `?`, generic placeholder response for recognized commands).
 This intentionally establishes the command-dispatch skeleton for upcoming command-specific tasks (`dir`, `type`, `run`, `cc`, `del`, `cls`, `mem`, `halt`) without prematurely implementing their filesystem/kernel side effects.
+## [2026-03-30] shell — Implemented `dir` and `type` through FS APIs
+Added concrete handlers in `shell_render_result()` for `dir` and `type <file>` commands. `dir` initializes the filesystem against `disk.img`, lists active entries through `fs_list`, and prints one name per line (or `(empty)` when no files are present).
+`type` now validates an argument, opens the requested file via `fs_open`, streams bytes with repeated `fs_read` calls, and writes content to the shell output stream. Both commands use `?` as an error response on missing args or FS/open failures.

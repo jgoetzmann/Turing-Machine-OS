@@ -1,5 +1,7 @@
 #include "shell.h"
 
+#include "../fs/fs.h"
+
 #include <ctype.h>
 #include <stddef.h>
 #include <string.h>
@@ -80,12 +82,57 @@ shell_cmd_t shell_parse_line(shell_t *sh, const char *line) {
 }
 
 void shell_render_result(FILE *out, shell_cmd_t cmd, const char *arg) {
-    (void)arg;
+    char names[64][13];
+    uint8_t buf[256];
+    int n;
+    int i;
+    int fh;
+    int r;
+
     if (out == NULL) {
         return;
     }
     switch (cmd) {
         case SHELL_CMD_NONE:
+            break;
+        case SHELL_CMD_DIR:
+            if (fs_init("disk.img") != 0) {
+                (void)fputs("?\n", out);
+                break;
+            }
+            n = fs_list(names, 64);
+            if (n <= 0) {
+                (void)fputs("(empty)\n", out);
+                break;
+            }
+            for (i = 0; i < n && i < 64; ++i) {
+                (void)fputs(names[i], out);
+                (void)fputc('\n', out);
+            }
+            break;
+        case SHELL_CMD_TYPE:
+            if (arg == NULL || arg[0] == '\0') {
+                (void)fputs("?\n", out);
+                break;
+            }
+            if (fs_init("disk.img") != 0) {
+                (void)fputs("?\n", out);
+                break;
+            }
+            fh = fs_open(arg);
+            if (fh < 0) {
+                (void)fputs("?\n", out);
+                break;
+            }
+            for (;;) {
+                r = fs_read(fh, buf, (int)sizeof(buf));
+                if (r <= 0) {
+                    break;
+                }
+                (void)fwrite(buf, 1u, (size_t)r, out);
+            }
+            fs_close(fh);
+            (void)fputc('\n', out);
             break;
         case SHELL_CMD_HELP:
             (void)fputs("dir type run cc del cls mem halt help\n", out);

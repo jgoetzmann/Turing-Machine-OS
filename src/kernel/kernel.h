@@ -5,6 +5,8 @@
 
 #include <stdint.h>
 
+#define TAPE_SNAP_INTERVAL 1000u
+
 typedef enum {
     KS_BOOT = 0,
     KS_IDLE = 1,

@@ -65,8 +65,8 @@
 - [x] P1-44 `make disk` target calls `mkdisk` to produce fresh `disk.img`
 
 ### Filesystem (`src/fs/fs.c`)
-- [ ] P1-45 Implement `fs_init()` — open disk image, verify geometry
-- [ ] P1-46 Implement internal `fs_read_sector(track, sector, buf)` and `fs_write_sector`
+- [x] P1-45 Implement `fs_init()` — open disk image, verify geometry
+- [x] P1-46 Implement internal `fs_read_sector(track, sector, buf)` and `fs_write_sector`
 - [ ] P1-47 Implement directory parsing — scan track 0 for active entries
 - [ ] P1-48 Implement `fs_open()` — find file by name, return handle
 - [ ] P1-49 Implement `fs_read()` — sequential sector read via allocation map

@@ -154,3 +154,7 @@ BOOT currently places a temporary `HLT` at `0x0100` and jumps there so the stub 
 Added periodic snapshot writing in `kernel_run()` every `TAPE_SNAP_INTERVAL` ticks (defined as `1000` in `kernel.h`), plus a final flush on exit.
 `/tmp/turingos_tape.bin` is written as the raw 64KB tape image from `mem_raw()`. `/tmp/turingos_meta.bin` is written as a compact 64-byte header with state (`[0]`), step count LE (`[1..4]`), dirty map bytes copied from `mem[0xFF10..]` (`[5..36]`), and current PC high/low (`[37..38]`).
 This keeps visualizer-facing output stable while dirty-map granularity remains the current 32-byte (256-page) in-memory representation.
+## [2026-03-30] fs — Disk geometry validation and sector I/O
+Implemented `fs_init()` to open a disk image in read/write mode, verify exact CP/M geometry size (`77 * 26 * 256 = 512512` bytes), and retain an internal file handle for sector operations.
+Implemented `fs_read_sector()` / `fs_write_sector()` with track/sector validation (track `0..76`, sector `1..26`), deterministic offset mapping, and 256-byte fixed sector transfers.
+Added `tests/fs/test_fs_sector.c` and integrated it into `tests/run_tests.sh` to verify valid init, read/write round-trip, out-of-range rejection, and geometry rejection for malformed disk files.

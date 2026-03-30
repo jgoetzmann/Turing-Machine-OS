@@ -2,6 +2,7 @@
 set -eu
 
 BUILD_DIR="build/tests/emu"
+FS_BUILD_DIR="build/tests/fs"
 TEST_BIN="${BUILD_DIR}/test_mem"
 CPU_TEST_BIN="${BUILD_DIR}/test_cpu_data_transfer"
 CPU_ARITH_BIN="${BUILD_DIR}/test_cpu_arithmetic"
@@ -14,8 +15,10 @@ CPU_OPCODES_BIN="${BUILD_DIR}/test_opcodes"
 CPU_HLT_BIN="${BUILD_DIR}/test_cpu_hlt"
 CPU_FLAGS_BIN="${BUILD_DIR}/test_cpu_flags"
 BIOS_TEST_BIN="${BUILD_DIR}/test_bios"
+FS_SECTOR_TEST_BIN="${FS_BUILD_DIR}/test_fs_sector"
 
 mkdir -p "${BUILD_DIR}"
+mkdir -p "${FS_BUILD_DIR}"
 
 cc -std=c99 -Wall -Wextra -Werror -pedantic \
   -I./src \
@@ -125,5 +128,13 @@ cc -std=c99 -Wall -Wextra -Werror -pedantic \
   -o "${BIOS_TEST_BIN}"
 
 "${BIOS_TEST_BIN}"
+
+cc -std=c99 -Wall -Wextra -Werror -pedantic \
+  -I./src \
+  ./tests/fs/test_fs_sector.c \
+  ./src/fs/fs.c \
+  -o "${FS_SECTOR_TEST_BIN}"
+
+"${FS_SECTOR_TEST_BIN}"
 
 echo "All tests passed."

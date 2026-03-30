@@ -1,0 +1,144 @@
+---
+description: TuringOS mandatory agent protocol — read project files before every session
+alwaysApply: true
+---
+
+# TURINGOS AGENT PROTOCOL — FOLLOW THIS EVERY SESSION, NO EXCEPTIONS
+
+You are a coding agent working on **TuringOS**: a CP/M-era 8-bit operating system modeled strictly as a Turing Machine, written in C99, targeting an Intel 8080 emulator. Before you write a single line of code or make any change, you must execute the following read-first protocol.
+
+---
+
+## STEP 1 — READ `spec.md`
+
+Open and read `spec.md` fully before starting any task.
+
+`spec.md` contains:
+- The complete Turing Machine model mapping (tape / head / states / transition function)
+- The 8080 architecture constraints
+- Every component's interface, responsibility, and file location
+- The directory structure
+- Build and Docker setup
+- What you are NOT allowed to do
+
+If your planned change contradicts anything in `spec.md`, **stop and reconcile the spec first** before writing code.
+
+---
+
+## STEP 2 — READ `progress.md`
+
+Open and read `progress.md` fully before starting any task.
+
+`progress.md` contains:
+- Every task broken down by component
+- Status markers: `[ ]` = not started, `[~]` = in progress, `[x]` = complete
+- Blockers and dependencies between tasks
+- The canonical "what to work on next"
+
+Pick only tasks that are `[ ]` and have their dependencies marked `[x]`. Do not work on tasks that are `[~]` unless you are the agent who set them in progress. Do not skip ahead.
+
+---
+
+## STEP 3 — READ `remember.md`
+
+Open and read `remember.md` fully before starting any task.
+
+`remember.md` contains:
+- Bugs that were found and fixed (so you don't re-introduce them)
+- Architectural decisions made mid-build (with rationale)
+- Known gotchas, tricky edge cases, and tested assumptions
+- Any deviations from `spec.md` that were approved and why
+
+This file is **append-only**. Never delete or overwrite entries. Never reformat existing entries.
+
+---
+
+## STEP 4 — DO YOUR WORK
+
+Now you may write code. Stay within your assigned component. Do not refactor other components unless `spec.md` explicitly says they share an interface with yours.
+
+After any code change, you must run the test suite before considering the task done:
+- Run `make test`
+- If tests fail, fix the issue and re-run `make test` until all tests pass
+- Do not mark work complete in `progress.md` or `remember.md` until tests pass
+
+---
+
+## STEP 5 — UPDATE `progress.md` WHEN DONE
+
+After completing work:
+- Change `[~]` to `[x]` for finished tasks
+- Add any new sub-tasks you discovered under the relevant component
+- Note any blockers you hit under the task with a `> BLOCKER:` line
+
+---
+
+## STEP 6 — UPDATE `remember.md` WHEN DONE
+
+After completing work, append a new dated entry for:
+- Any bug you fixed (describe root cause + fix)
+- Any decision you made that isn't obvious from the code
+- Any assumption you tested or validated
+- Any deviation from `spec.md` (must include justification)
+
+Format:
+```
+## [YYYY-MM-DD] <component> — <short title>
+<body: what happened, why, what was done>
+```
+
+---
+
+## HARD CONSTRAINTS — NEVER VIOLATE THESE
+
+These are the Turing Machine architectural laws. They are not preferences or guidelines.
+
+- **Tape** = 64KB flat memory array (`uint8_t mem[65536]`). No malloc on the tape. No virtual memory. No paging. No segmentation beyond the TM state machine's own bookkeeping.
+- **Head** = 8080 Program Counter (`uint16_t pc`). The head moves by executing 8080 instructions.
+- **Alphabet** = bytes (0x00–0xFF). Every cell on the tape is one byte.
+- **States** = the OS kernel FSM: `BOOT → IDLE → SHELL → RUNNING → SYSCALL → HALT`. The kernel's `state` variable is the TM state register.
+- **Transition function** = the fetch-decode-execute loop + the BIOS/syscall dispatcher. This is the only place state transitions are legal.
+- **Addresses are `uint16_t`** everywhere. No 32-bit addresses. No pointers into host memory passed into the emulator.
+- **All kernel and emulator code is C99** — no C++, no C11 VLAs, no GCC extensions unless unavoidable and documented in `remember.md`.
+- **Visualization is Python 3 + pygame only** — no other frameworks, no web servers, no Electron.
+- **No new external C dependencies** without updating `spec.md` and getting a comment added to `remember.md`.
+
+---
+
+## COMPONENT OWNERSHIP
+
+Each agent session should own exactly one component. Do not scope-creep.
+
+| Component | Owner file(s) |
+|-----------|--------------|
+| 8080 Emulator core | `src/emu/cpu.c`, `src/emu/cpu.h` |
+| Memory / Tape | `src/emu/mem.c`, `src/emu/mem.h` |
+| BIOS & I/O | `src/bios/bios.c`, `src/bios/bios.h` |
+| Kernel FSM | `src/kernel/kernel.c`, `src/kernel/kernel.h` |
+| Filesystem (CP/M-like) | `src/fs/fs.c`, `src/fs/fs.h` |
+| Shell | `src/shell/shell.c`, `src/shell/shell.h` |
+| Tiny C Compiler | `src/compiler/compiler.c`, `src/compiler/compiler.h` |
+| Test Suite | `tests/` |
+| Pygame Visualizer | `viz/visualizer.py`, `viz/tape_bridge.py` |
+| Build / Docker | `Makefile`, `Dockerfile`, `docker-compose.yml` |
+
+---
+
+## BUILD COMMANDS (ALWAYS VALID)
+
+```bash
+# Build everything
+make all
+
+# Run the OS
+make run
+
+# Run tests
+make test
+
+# Launch visualizer alongside OS (separate terminal)
+python3 viz/visualizer.py
+
+# Docker
+docker-compose up --build
+```

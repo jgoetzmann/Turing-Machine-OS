@@ -1,0 +1,156 @@
+# TuringOS — Remember
+
+> **APPEND ONLY. Never delete or overwrite entries.**  
+> This file is the institutional memory of the project.  
+> Format for new entries:
+> ```
+> ## [YYYY-MM-DD] <component> — <short title>
+> <body>
+> ```
+
+---
+
+## [PROJECT INIT] Architecture — TM model is a hard constraint
+
+The Turing Machine mapping is not a metaphor or a design pattern. It is a hard constraint.
+
+- Tape = `mem[65536]`. No exceptions. No allocations outside this array from inside the emulator.
+- Head = 8080 PC. The only way to "move the head" is to execute 8080 instructions.
+- States = the `kernel_state_t` enum. The kernel FSM is the finite state control.
+- Transition function = `cpu_step()` + `bios_dispatch()`. These are the ONLY legal state-transition sites.
+
+Any architecture that violates this mapping must be rejected, even if it would be simpler or faster.
+
+---
+
+## [PROJECT INIT] Architecture — Why Intel 8080, not Z80
+
+Z80 is an extension of the 8080 that adds additional instructions (IX/IY registers, DJNZ, etc.). Targeting Z80 would require implementing a larger, more complex instruction set. The 8080 is the minimal complete 8-bit CPU that CP/M ran on historically, and it keeps the emulator scope tight. If a Z80-specific instruction appears in any test program or shell source, it must be replaced with 8080 equivalents.
+
+---
+
+## [PROJECT INIT] Architecture — `.com` file format
+
+`.com` files are raw flat binaries. No headers. No relocation tables. No segments. The OS loads the entire file into memory starting at address `0x0100`. The entry point is always byte 0 of the file (address `0x0100` in memory). The compiler must generate position-dependent code assuming base address `0x0100`.
+
+---
+
+## [PROJECT INIT] Architecture — No malloc in kernel or emulator
+
+The kernel and emulator code must use zero heap allocation (`malloc`, `calloc`, `realloc` are forbidden in `src/`). All data structures are statically declared. This is not a performance optimization — it is a correctness requirement. The "memory" of this system is `mem[65536]`, and allocating host memory for kernel data structures would break the TM model.
+
+The only exception is the compiler (`src/compiler/`), which runs on the host and may use `malloc` for its AST nodes during compilation. The compiler is a host tool, not part of the emulated system.
+
+---
+
+## [PROJECT INIT] Architecture — Filesystem buffer cache in `mem[]`
+
+The filesystem buffer cache is located at `mem[0xC000..0xEFFF]` (12KB). This means disk sectors read by the BIOS are written directly into the tape. This is intentional — it makes disk I/O visible on the tape visualization and keeps the TM model clean. The FS code must never use a separate host-side buffer for sector data.
+
+---
+
+## [PROJECT INIT] Architecture — Tape snapshot frequency
+
+The kernel writes the tape snapshot to `/tmp/turingos_tape.bin` every 1000 ticks. This is a tunable constant (`#define TAPE_SNAP_INTERVAL 1000` in `kernel.h`). If the visualizer feels sluggish or the OS feels slow due to file I/O, reduce this to 5000 or increase to 100. The default of 1000 is a starting point, not a guarantee.
+
+---
+
+## [PROJECT INIT] Known pitfalls — 8080 flag computation
+
+The 8080 flag register has several non-obvious behaviors that are frequently wrong in emulator implementations:
+
+1. **Auxiliary Carry (AC)**: Set when there is a carry out of bit 3 into bit 4. Most ops set this; it is used by `DAA`. Easy to forget.
+2. **Parity (P)**: Set when the number of set bits in the result is even. Must be computed for all arithmetic/logic ops.
+3. **DAA**: The Decimal Adjust Accumulator instruction is complex. It adjusts A after BCD arithmetic using the AC and CY flags. Implement this carefully and test it explicitly.
+4. **PUSH PSW / POP PSW**: Pushes/pops the A register and flags register together as a 16-bit pair. The flags are packed in a specific bit layout: `S Z 0 AC 0 P 1 CY`. Bit 1 is always 1, bits 3 and 5 are always 0. Get this wrong and the stack will corrupt A.
+5. **CMP**: Does not modify the accumulator. It performs a subtraction and sets flags but discards the result. Easy to accidentally write the result back.
+
+These are all well-documented in the Intel 8080 Programmer's Manual. The test suite must cover each of these edge cases.
+
+---
+
+## [PROJECT INIT] Known pitfalls — CP/M BIOS calling convention
+
+This implementation uses `OUT 0x01` as the BIOS call trigger (port 0x01). The function ID is in register A. This differs slightly from standard CP/M which uses a jump table at 0x0000. Both approaches are used in real CP/M implementations. We use the `OUT` port approach because it's cleaner for the emulator to intercept than scanning jumps. The shell and compiler must use this convention. Document any deviation here.
+
+---
+
+## [PROJECT INIT] Known pitfalls — pygame shared memory on macOS
+
+On macOS, `/tmp` is actually `/private/tmp`. The mmap path in `tape_bridge.py` should use `os.path.realpath('/tmp/turingos_tape.bin')` to resolve the symlink. Docker avoids this issue entirely. If the visualizer silently fails to find the tape file on macOS, this is likely the cause.
+
+---
+
+## [PROJECT INIT] Known pitfalls — raw terminal mode
+
+The BIOS CONIN function must put the host terminal into raw mode (no echo, no line buffering) so the shell can read individual keystrokes. On POSIX this means using `tcsetattr` with `ICANON` and `ECHO` cleared. The kernel must restore the terminal to cooked mode on `KS_HALT` or on any unhandled signal (set up a `SIGINT` handler that restores terminal state before exit). Failure to restore terminal state leaves the user's terminal broken after the OS exits.
+
+---
+
+## [PROJECT INIT] Decision — C99 not C11
+
+The codebase uses C99. C11 added `_Alignas`, `_Atomic`, `_Generic`, `_Static_assert`, and other features we don't need. Using C99 keeps the code more portable and avoids any temptation to use VLAs (which are technically optional in C11) or threads. The compiler flag must be `-std=c99`.
+
+---
+
+## [PROJECT INIT] Decision — Docker is primary, venv is visualizer-only
+
+The full OS build and test suite runs in Docker. This ensures reproducibility. The Python virtualenv in `viz/.venv` is provided as a convenience for running the visualizer without Docker, but it is not the primary development path. Agents working on the visualizer may use either. Agents working on the kernel/emulator must use Docker or a system with gcc + make installed.
+
+---
+
+_Add new entries below this line._
+## [2026-03-30] build/disk — Initial scaffold and bootstrap build
+Bootstrapped the repository from docs-only state into a compilable C99 project skeleton.
+Added `Makefile`, `Dockerfile`, `docker-compose.yml`, core directory layout, C stub modules, and `tools/mkdisk.c`.
+Validated with `make all`, `make run`, and `make disk`; `disk.img` is generated at 512,512 bytes with directory bytes initialized to `0xE5`.
+## [2026-03-30] emu/mem — Boundary tests wired into make test
+Added `tests/emu/test_mem.c` to validate zero-init and read/write round-trips at boundary addresses (`0x0000`, `0x7FFF`, `0xFFFF`) and to verify `mem_raw()` exposes the same backing tape bytes.
+Replaced placeholder `make test` behavior with `tests/run_tests.sh` so Phase 1 memory verification runs as part of the normal build flow.
+## [2026-03-30] emu/cpu — Data-transfer decoder foundation
+Implemented fetch/decode in `cpu_step()` with working data-transfer opcodes: `MOV`, `MVI`, `LXI`, `LDA`, `STA`, `LHLD`, `SHLD`, `XCHG`, `XTHL`, `SPHL`, `PCHL`; also wired `NOP` and `HLT` handling in the same decoder pass.
+Added `tests/emu/test_cpu_data_transfer.c` and integrated it into `tests/run_tests.sh` to validate core register/memory transfer paths and `HLT` behavior while the remaining opcode groups are still pending.
+## [2026-03-30] emu/cpu — Arithmetic opcodes and baseline flag behavior
+Implemented arithmetic opcode coverage in `cpu_step()` for `ADD/ADI/ADC`, `SUB/SUI/SBB/SBI`, `INR/DCR`, `INX/DCX`, `DAD`, and `DAA`, including baseline updates for `S`, `Z`, `P`, `AC`, and `CY` where those instructions define flag changes.
+Added `tests/emu/test_cpu_arithmetic.c` and wired it into `tests/run_tests.sh` so arithmetic register effects, carry/zero behavior, 16-bit increments/decrements, and a DAA sanity path are now regression-tested.
+## [2026-03-30] emu/cpu — Logic and rotate opcodes
+Implemented `ANA/ANI`, `ORA/ORI`, `XRA/XRI` with `CY` and `AC` cleared and `S/Z/P` from result; `CMP/CPI` set flags like `SUB` without changing `A`; `RLC/RRC/RAL/RAR` update `CY` only; `CMA` leaves flags; `STC`/`CMC` affect carry only.
+Added `tests/emu/test_cpu_logic.c` and hooked it into `tests/run_tests.sh`.
+## [2026-03-30] emu/cpu — Branch, call, and return opcodes
+Implemented `JMP` and all conditional jump forms, `CALL` and all conditional call forms, and `RET` plus all conditional return forms. Added helper routines for 16-bit immediate fetch, stack push/pop for return addresses, and condition decoding from flags.
+Added `tests/emu/test_cpu_branch.c` and wired it into `tests/run_tests.sh` to validate taken/not-taken branches, unconditional call/return behavior, and conditional call/return flow.
+## [2026-03-30] emu/cpu — Stack PUSH/POP including PSW packing
+Implemented `PUSH`/`POP` for `BC`, `DE`, `HL`, and `PSW`. For `PSW`, flag bytes are packed/unpacked as `S Z 0 AC 0 P 1 CY` so bit 1 stays set and bits 3/5 remain clear.
+Added `tests/emu/test_cpu_stack.c` and integrated it into `tests/run_tests.sh` to validate stack pointer movement, memory byte order, and PSW round-trip behavior.
+## [2026-03-30] emu/cpu — IN/OUT latch for BIOS dispatch
+Implemented `IN` (`0xDB`) and `OUT` (`0xD3`). `IN` reads from a CPU-hosted 256-byte input port table (`io_in_ports`) into register `A`; `OUT` captures `A` into an output latch (`io_out_value`) with `io_out_port` and `io_out_pending` so kernel/BIOS code can observe and clear it.
+Added `tests/emu/test_cpu_io.c` and integrated it into `tests/run_tests.sh` to verify IN reads, OUT latch values, and pending-flag behavior across successive writes.
+## [2026-03-30] emu/cpu — Control opcodes RST/EI/DI/RIM/SIM
+Implemented `RST n` as a call-like vector jump (push return address, jump to `n*8`), plus `EI`, `DI`, `RIM`, and `SIM`. Added small CPU state fields for interrupt enable and simple `rim_value`/`sim_value` latches to support deterministic tests and future BIOS/kernel integration.
+Added `tests/emu/test_cpu_control.c` and integrated it into `tests/run_tests.sh` to validate interrupt-toggle behavior, RIM/SIM data flow, and RST stack/PC behavior.
+## [2026-03-30] emu/cpu — Corrected AND auxiliary carry semantics
+Adjusted flag logic so `ANA/ANI` set `AC=1` and clear `CY`, while `ORA/ORI` and `XRA/XRI` keep both `AC` and `CY` cleared. This aligns with Intel 8080 flag behavior and closes a subtle mismatch in earlier logic handling.
+Expanded `tests/emu/test_cpu_logic.c` to assert `AC/CY` expectations for `ANI`, `XRI`, and `ORI`.
+## [2026-03-30] tests/emu — Opcode group smoke harness
+Added `tests/emu/test_opcodes.c` as a compact opcode-by-group verification pass that exercises representative instructions across all implemented groups (data transfer, arithmetic, logic, branch, stack, I/O, control) and confirms core register/PC/stack effects.
+Integrated the new test into `tests/run_tests.sh` so every `make test` run now includes the opcode-group smoke suite.
+## [2026-03-30] tests/emu — Dedicated HLT and boundary flag coverage
+Added `tests/emu/test_cpu_hlt.c` to assert explicit `HLT` semantics: `cpu->halted` is set, `PC` advances by one for the `HLT` fetch, and subsequent `cpu_step()` calls are no-ops while halted.
+Added `tests/emu/test_cpu_flags.c` to cover boundary flag behavior for `ADD`, `SUB`, `AND`, `OR`, and `XOR`, with explicit checks for `S`, `Z`, `AC`, `P`, and `CY` where applicable. Wired both tests into `tests/run_tests.sh`.
+## [2026-03-30] bios — Dispatch table and output queue tests
+Implemented BIOS dispatch handling for function IDs `0x01`–`0x0E`, with concrete behavior for `CONIN` (`A <- getchar()` or `0` on EOF) and `CONOUT` (enqueue register `C` into the BIOS output ring), while keeping remaining IDs as explicit stubs for later FS integration.
+Kept `bios_pending_output()` / `bios_get_output()` as the queue drain interface and made dispatch clear `cpu->io_out_pending` after handling.
+Added `tests/bios/test_bios.c` and integrated it into `tests/run_tests.sh` to verify queue init/drain behavior, repeated wraparound-safe enqueue/dequeue cycles, `CONIN` read path via `ungetc`, and pending-flag clearing.
+## [2026-03-30] bios/fs — Disk parameter stubs and sector delegation wiring
+Implemented BIOS disk-parameter state for `SELDISK`, `SETTRK`, `SETSEC`, and `SETDMA` with defaults reset by `bios_init()`, then used these values in `READ`/`WRITE` dispatch handling.
+Wired BIOS `READ` (`0x0D`) and `WRITE` (`0x0E`) to `fs_read_sector` / `fs_write_sector` hooks and return status in `A` (`0` success, `1` failure), including a DMA bounds guard for 256-byte sector transfers.
+Added `fs_read_sector` / `fs_write_sector` declarations and temporary stub implementations in `fs.c` (currently return `-1` until filesystem sector I/O is implemented). Extended `tests/bios/test_bios.c` to validate disk parameter persistence and READ/WRITE delegation status behavior.
+## [2026-03-30] kernel — FSM loop and TM metadata writes
+Implemented a first real `kernel_run()` FSM loop with `BOOT`, `IDLE`, `SHELL`, `RUNNING`, `SYSCALL`, and `HALT` handling. `SHELL` and `RUNNING` execute one `cpu_step()` per loop, update `steps`, and route BIOS syscall triggers through `KS_SYSCALL` when CPU `OUT` port `0x01` is pending.
+Added BIOS output draining in-loop via `bios_pending_output()` / `bios_get_output()` and host `putchar`.
+Kernel now writes TM metadata each tick: state byte to `mem[0xFF00]`, low 32 bits of `steps` to `mem[0xFF01..0xFF04]`, and a placeholder zeroed 32-byte dirty-page map at `mem[0xFF10..0xFF2F]`.
+BOOT currently places a temporary `HLT` at `0x0100` and jumps there so the stub system exits deterministically until shell loading is implemented.
+## [2026-03-30] kernel — Periodic `/tmp` tape and meta snapshots
+Added periodic snapshot writing in `kernel_run()` every `TAPE_SNAP_INTERVAL` ticks (defined as `1000` in `kernel.h`), plus a final flush on exit.
+`/tmp/turingos_tape.bin` is written as the raw 64KB tape image from `mem_raw()`. `/tmp/turingos_meta.bin` is written as a compact 64-byte header with state (`[0]`), step count LE (`[1..4]`), dirty map bytes copied from `mem[0xFF10..]` (`[5..36]`), and current PC high/low (`[37..38]`).
+This keeps visualizer-facing output stable while dirty-map granularity remains the current 32-byte (256-page) in-memory representation.

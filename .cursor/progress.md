@@ -102,8 +102,8 @@
 ## PHASE 3 — Tiny C Compiler
 
 ### Compiler
-- [ ] P3-01 Implement lexer (`cc_lex`) — tokenize C source into token stream
-- [ ] P3-02 Define token types and AST node types in `compiler.h`
+- [x] P3-01 Implement lexer (`cc_lex`) — tokenize C source into token stream
+- [x] P3-02 Define token types and AST node types in `compiler.h`
 - [ ] P3-03 Implement parser — recursive descent, produce AST
 - [ ] P3-04 Implement AST for: variable decl, assignment, arithmetic expr, if/else, while, for, function decl/call, return
 - [ ] P3-05 Implement code generator — walk AST, emit 8080 instructions

@@ -162,6 +162,41 @@ static int fs_alloc_free_sector(uint8_t *track, uint8_t *sector) {
     return -1;
 }
 
+static int fs_find_dir_index_by_cpm_name(const uint8_t cpm_name[11]) {
+    unsigned int i;
+    for (i = 0u; i < FS_DIR_ENTRIES; ++i) {
+        const uint8_t *entry = &g_dir_raw[i * FS_DIR_ENTRY_SIZE];
+        if (g_dir_active[i] == 0u) {
+            continue;
+        }
+        if (memcmp(&entry[1], cpm_name, 11u) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+static void fs_entry_to_name13(const uint8_t *entry, char out[13]) {
+    unsigned int p = 0u;
+    unsigned int i;
+    for (i = 0u; i < 8u; ++i) {
+        if (entry[1u + i] == ' ') {
+            break;
+        }
+        out[p++] = (char)entry[1u + i];
+    }
+    if (entry[9] != ' ') {
+        out[p++] = '.';
+        for (i = 0u; i < 3u; ++i) {
+            if (entry[9u + i] == ' ') {
+                break;
+            }
+            out[p++] = (char)entry[9u + i];
+        }
+    }
+    out[p] = '\0';
+}
+
 int fs_init(const char *disk_image_path) {
     FILE *fp;
     long size;
@@ -204,8 +239,8 @@ int fs_init(const char *disk_image_path) {
 
 int fs_open(const char *name) {
     uint8_t wanted[11];
-    unsigned int i;
     unsigned int h;
+    int dir_index;
 
     if (g_disk_fp == NULL) {
         return -1;
@@ -217,23 +252,17 @@ int fs_open(const char *name) {
         return -1;
     }
 
-    for (i = 0u; i < FS_DIR_ENTRIES; ++i) {
-        const uint8_t *entry = &g_dir_raw[i * FS_DIR_ENTRY_SIZE];
-        if (g_dir_active[i] == 0u) {
-            continue;
-        }
-        if (memcmp(&entry[1], wanted, 11u) != 0) {
-            continue;
-        }
-        for (h = 0u; h < FS_OPEN_MAX; ++h) {
-            if (g_open_in_use[h] == 0u) {
-                g_open_in_use[h] = 1u;
-                g_open_dir_index[h] = (uint8_t)i;
-                g_open_pos[h] = 0u;
-                return (int)h;
-            }
-        }
+    dir_index = fs_find_dir_index_by_cpm_name(wanted);
+    if (dir_index < 0) {
         return -1;
+    }
+    for (h = 0u; h < FS_OPEN_MAX; ++h) {
+        if (g_open_in_use[h] == 0u) {
+            g_open_in_use[h] = 1u;
+            g_open_dir_index[h] = (uint8_t)dir_index;
+            g_open_pos[h] = 0u;
+            return (int)h;
+        }
     }
     return -1;
 }
@@ -387,19 +416,81 @@ void fs_close(int fh) {
 }
 
 int fs_list(char names[][13], int max) {
-    (void)names;
-    (void)max;
-    return 0;
+    unsigned int i;
+    int count = 0;
+    if (max < 0) {
+        return -1;
+    }
+    if (g_disk_fp == NULL) {
+        return -1;
+    }
+    if (fs_refresh_directory() != 0) {
+        return -1;
+    }
+    for (i = 0u; i < FS_DIR_ENTRIES; ++i) {
+        const uint8_t *entry = &g_dir_raw[i * FS_DIR_ENTRY_SIZE];
+        if (g_dir_active[i] == 0u) {
+            continue;
+        }
+        if (count < max) {
+            fs_entry_to_name13(entry, names[count]);
+        }
+        count++;
+    }
+    return count;
 }
 
 int fs_delete(const char *name) {
-    (void)name;
-    return -1;
+    uint8_t wanted[11];
+    int dir_index;
+    unsigned int h;
+    uint8_t *entry;
+
+    if (g_disk_fp == NULL) {
+        return -1;
+    }
+    if (fs_build_cpm_name(name, wanted) != 0) {
+        return -1;
+    }
+    if (fs_refresh_directory() != 0) {
+        return -1;
+    }
+    dir_index = fs_find_dir_index_by_cpm_name(wanted);
+    if (dir_index < 0) {
+        return -1;
+    }
+
+    entry = &g_dir_raw[(unsigned int)dir_index * FS_DIR_ENTRY_SIZE];
+    entry[0] = 0xE5u;
+    memset(&entry[16], 0, 16u);
+    entry[15] = 0u;
+    if (fs_persist_directory_entry((uint8_t)dir_index) != 0) {
+        return -1;
+    }
+    g_dir_active[(unsigned int)dir_index] = 0u;
+
+    for (h = 0u; h < FS_OPEN_MAX; ++h) {
+        if (g_open_in_use[h] != 0u && g_open_dir_index[h] == (uint8_t)dir_index) {
+            g_open_in_use[h] = 0u;
+            g_open_dir_index[h] = 0u;
+            g_open_pos[h] = 0u;
+        }
+    }
+    return 0;
 }
 
 int fs_exists(const char *name) {
-    (void)name;
-    return 0;
+    uint8_t wanted[11];
+    if (g_disk_fp == NULL) {
+        return 0;
+    }
+    if (fs_build_cpm_name(name, wanted) != 0) {
+        return 0;
+    }
+    if (fs_refresh_directory() != 0) {
+        return 0;
+    }
+    return (fs_find_dir_index_by_cpm_name(wanted) >= 0) ? 1 : 0;
 }
 
 void fs_flush(void) {

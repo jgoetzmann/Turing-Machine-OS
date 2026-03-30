@@ -166,3 +166,8 @@ Extended `tests/fs/test_fs_sector.c` to create active directory entries on disk 
 Implemented per-handle file cursor state and wired `fs_read()` to resolve sequential reads through directory allocation-map entries (`entry[16..31]`) in 256-byte sector chunks.
 Implemented `fs_write()` with on-demand free-sector allocation, read-modify-write for partial sectors, allocation map updates, and directory entry persistence; file size tracking uses `entry[15]` as sectors used for the current extent.
 Extended `tests/fs/test_fs_sector.c` with a `DATA.BIN` round-trip using `fs_write` then `fs_read`, verifying exact payload recovery and EOF behavior once the handle cursor reaches file size.
+## [2026-03-30] fs — List/delete/exists API behavior
+Implemented `fs_list()` by scanning active directory entries and formatting CP/M 8.3 names into host strings (`NAME.EXT`, uppercase, no trailing spaces). Return value now reports total active entry count.
+Implemented `fs_exists()` using normalized CP/M name matching against refreshed directory state.
+Implemented `fs_delete()` to mark entry status `0xE5`, clear allocation map bytes for the extent, persist the directory entry, and invalidate any open handles pointing at that directory slot.
+Extended `tests/fs/test_fs_sector.c` to verify list ordering/content, existence checks, successful delete semantics, and failure on repeated delete attempts.

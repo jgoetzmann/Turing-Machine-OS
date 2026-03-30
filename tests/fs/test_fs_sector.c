@@ -70,6 +70,8 @@ int main(void) {
     int h2;
     int hw;
     int hr;
+    char names[8][13];
+    int listed;
     unsigned int i;
 
     create_blank_disk(TEST_DISK_PATH);
@@ -145,6 +147,21 @@ int main(void) {
     if (fs_open("BAD-NAME.TXT") != -1) {
         fail("fs_open should reject invalid CP/M-style name");
     }
+    if (fs_exists("HELLO.COM") != 1) {
+        fail("fs_exists should detect existing file");
+    }
+    if (fs_exists("missing.bin") != 0) {
+        fail("fs_exists should return 0 for missing file");
+    }
+
+    listed = fs_list(names, 8);
+    if (listed < 2) {
+        fail("fs_list should include active directory entries");
+    }
+    if (strcmp(names[0], "HELLO.COM") != 0 || strcmp(names[1], "README.TXT") != 0) {
+        fail("fs_list should expose normalized 8.3 names in directory order");
+    }
+
     fs_close(h1);
     fs_close(h2);
 
@@ -190,6 +207,19 @@ int main(void) {
         fail("fs_read should report EOF once extent is exhausted");
     }
     fs_close(hr);
+
+    if (fs_delete("DATA.BIN") != 0) {
+        fail("fs_delete should succeed for existing file");
+    }
+    if (fs_exists("DATA.BIN") != 0) {
+        fail("fs_delete should remove file from existence checks");
+    }
+    if (fs_open("DATA.BIN") != -1) {
+        fail("deleted file should not be openable");
+    }
+    if (fs_delete("DATA.BIN") == 0) {
+        fail("fs_delete should fail for already deleted file");
+    }
 
     (void)TOTAL_BYTES;
     puts("PASS: test_fs_sector");

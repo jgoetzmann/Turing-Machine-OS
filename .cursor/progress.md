@@ -85,8 +85,8 @@
 - [x] P2-02 Implement `dir` command
 - [x] P2-03 Implement `type <file>` command
 - [x] P2-04 Implement `run <file>` — load `.com` into TPA, set PC=0x0100, switch to RUNNING state
-- [ ] P2-05 Implement `cc <file.c>` — invoke compiler
-- [ ] P2-06 Implement `del`, `cls`, `mem`, `halt`, `help`
+- [x] P2-05 Implement `cc <file.c>` — invoke compiler
+- [x] P2-06 Implement `del`, `cls`, `mem`, `halt`, `help`
 - [ ] P2-07 Implement line editing (backspace)
 - [ ] P2-08 Add `make shell` target that compiles `shell.c` → `bin/shell.com`
 - [ ] P2-09 Integration test: boot OS, shell prompt appears, `dir` runs cleanly

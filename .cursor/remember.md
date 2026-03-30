@@ -186,3 +186,7 @@ Added concrete handlers in `shell_render_result()` for `dir` and `type <file>` c
 ## [2026-03-30] shell — Implemented `run <file>` TPA loader hook
 Extended shell state with a run-request handshake (`run_requested`, `run_entry`) and updated `run` command handling to load file bytes from FS into TPA starting at `0x0100` via `mem_write`.
 After successful load, shell now sets `run_requested=1` and `run_entry=0x0100`, providing a deterministic hook for kernel integration to set `cpu.pc` and transition to `KS_RUNNING`.
+## [2026-03-30] shell — Added cc/del/cls/mem/halt command handlers
+Implemented `cc` command wiring to `cc_compile(src, out)` with `.com` output path derivation from the provided source name.
+Implemented `del` through filesystem APIs (`fs_init("disk.img")` + `fs_delete`), `cls` via ANSI clear sequence, and `mem` as a fixed tape-region summary aligned to the spec map.
+Added a halt handshake flag (`halt_requested`) so `halt` command can signal kernel-facing termination intent while still producing shell output.

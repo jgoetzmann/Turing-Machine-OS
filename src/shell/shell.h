@@ -22,6 +22,7 @@ typedef struct {
     char arg[129];
     int run_requested;
     unsigned short run_entry;
+    int halt_requested;
 } shell_t;
 
 void shell_init(shell_t *sh);

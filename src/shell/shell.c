@@ -1,5 +1,6 @@
 #include "shell.h"
 
+#include "../compiler/compiler.h"
 #include "../emu/mem.h"
 #include "../fs/fs.h"
 
@@ -11,6 +12,37 @@ static int streq(const char *a, const char *b) {
     return strcmp(a, b) == 0;
 }
 
+static void build_com_path(const char *src, char *out, size_t out_sz) {
+    size_t i = 0u;
+    size_t dot = (size_t)-1;
+    if (out_sz == 0u) {
+        return;
+    }
+    while (src[i] != '\0' && i < out_sz - 1u) {
+        out[i] = src[i];
+        if (src[i] == '.') {
+            dot = i;
+        }
+        i++;
+    }
+    out[i] = '\0';
+    if (dot != (size_t)-1 && dot + 4u < out_sz) {
+        out[dot] = '.';
+        out[dot + 1u] = 'c';
+        out[dot + 2u] = 'o';
+        out[dot + 3u] = 'm';
+        out[dot + 4u] = '\0';
+        return;
+    }
+    if (i + 4u < out_sz) {
+        out[i++] = '.';
+        out[i++] = 'c';
+        out[i++] = 'o';
+        out[i++] = 'm';
+        out[i] = '\0';
+    }
+}
+
 void shell_init(shell_t *sh) {
     if (sh == NULL) {
         return;
@@ -19,6 +51,7 @@ void shell_init(shell_t *sh) {
     sh->arg[0] = '\0';
     sh->run_requested = 0;
     sh->run_entry = 0x0100u;
+    sh->halt_requested = 0;
 }
 
 void shell_prompt(FILE *out) {
@@ -92,9 +125,11 @@ void shell_render_result(shell_t *sh, FILE *out, shell_cmd_t cmd, const char *ar
     int fh;
     int r;
     unsigned short load_addr = 0x0100u;
+    char out_path[256];
 
     if (sh != NULL) {
         sh->run_requested = 0;
+        sh->halt_requested = 0;
     }
     if (out == NULL) {
         return;
@@ -178,6 +213,49 @@ void shell_render_result(shell_t *sh, FILE *out, shell_cmd_t cmd, const char *ar
             break;
         case SHELL_CMD_HELP:
             (void)fputs("dir type run cc del cls mem halt help\n", out);
+            break;
+        case SHELL_CMD_CC:
+            if (arg == NULL || arg[0] == '\0') {
+                (void)fputs("?\n", out);
+                break;
+            }
+            build_com_path(arg, out_path, sizeof(out_path));
+            if (cc_compile(arg, out_path) != 0) {
+                (void)fputs("?\n", out);
+                break;
+            }
+            (void)fputs(out_path, out);
+            (void)fputc('\n', out);
+            break;
+        case SHELL_CMD_DEL:
+            if (arg == NULL || arg[0] == '\0') {
+                (void)fputs("?\n", out);
+                break;
+            }
+            if (fs_init("disk.img") != 0 || fs_delete(arg) != 0) {
+                (void)fputs("?\n", out);
+                break;
+            }
+            (void)fputs("OK\n", out);
+            break;
+        case SHELL_CMD_CLS:
+            (void)fputs("\x1b[2J\x1b[H", out);
+            break;
+        case SHELL_CMD_MEM:
+            (void)fputs("0000-00FF BIOS\n", out);
+            (void)fputs("0100-3FFF TPA\n", out);
+            (void)fputs("4000-7FFF KERNEL\n", out);
+            (void)fputs("8000-BFFF SHELL\n", out);
+            (void)fputs("C000-EFFF FS\n", out);
+            (void)fputs("F000-FDFF STACK\n", out);
+            (void)fputs("FE00-FEFF IO\n", out);
+            (void)fputs("FF00-FFFF META\n", out);
+            break;
+        case SHELL_CMD_HALT:
+            if (sh != NULL) {
+                sh->halt_requested = 1;
+            }
+            (void)fputs("HALT\n", out);
             break;
         case SHELL_CMD_UNKNOWN:
             (void)fputs("?\n", out);

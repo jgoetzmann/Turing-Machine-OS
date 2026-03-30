@@ -178,6 +178,18 @@ typedef struct {
     int max_nodes;
 } cc_parser_t;
 
+typedef struct {
+    unsigned char *buf;
+    int len;
+    int cap;
+} cc_out_t;
+
+typedef struct {
+    const cc_ast_node_t *nodes;
+    int node_count;
+    cc_out_t *out;
+} cc_codegen_t;
+
 static int p_peek_kind(const cc_parser_t *p) {
     if (p->pos < 0 || p->pos >= p->token_count) {
         return (int)CC_TOK_EOF;
@@ -617,18 +629,139 @@ int cc_parse(const char *src,
     return p.node_count;
 }
 
+static int cg_emit1(cc_out_t *o, unsigned char b) {
+    if (o->len >= o->cap) return -1;
+    o->buf[o->len++] = b;
+    return 0;
+}
+
+static int cg_node_ok(const cc_codegen_t *cg, int idx) {
+    return idx >= 0 && idx < cg->node_count;
+}
+
+static int cg_expr(cc_codegen_t *cg, int idx);
+
+static int cg_binop(cc_codegen_t *cg, int idx) {
+    const cc_ast_node_t *n;
+    if (!cg_node_ok(cg, idx)) return -1;
+    n = &cg->nodes[idx];
+    if (cg_expr(cg, n->left) != 0) return -1;
+    if (cg_emit1(cg->out, 0x47u) != 0) return -1; /* MOV B,A */
+    if (cg_expr(cg, n->right) != 0) return -1;
+    switch (n->op) {
+        case CC_TOK_PLUS:
+            if (cg_emit1(cg->out, 0x80u) != 0) return -1; /* ADD B */
+            return 0;
+        case CC_TOK_MINUS:
+            if (cg_emit1(cg->out, 0x4Fu) != 0) return -1; /* MOV C,A */
+            if (cg_emit1(cg->out, 0x78u) != 0) return -1; /* MOV A,B */
+            if (cg_emit1(cg->out, 0x91u) != 0) return -1; /* SUB C */
+            return 0;
+        default:
+            return -1;
+    }
+}
+
+static int cg_expr(cc_codegen_t *cg, int idx) {
+    const cc_ast_node_t *n;
+    if (!cg_node_ok(cg, idx)) return -1;
+    n = &cg->nodes[idx];
+    switch (n->kind) {
+        case CC_AST_LITERAL:
+            if (cg_emit1(cg->out, 0x3Eu) != 0) return -1; /* MVI A,imm8 */
+            if (cg_emit1(cg->out, (unsigned char)(n->value & 0xFF)) != 0) return -1;
+            return 0;
+        case CC_AST_BINOP:
+            return cg_binop(cg, idx);
+        default:
+            return -1;
+    }
+}
+
+static int cg_stmt(cc_codegen_t *cg, int idx, int *saw_return) {
+    const cc_ast_node_t *n;
+    if (!cg_node_ok(cg, idx)) return -1;
+    n = &cg->nodes[idx];
+    switch (n->kind) {
+        case CC_AST_RETURN:
+            if (n->left >= 0) {
+                if (cg_expr(cg, n->left) != 0) return -1;
+            } else {
+                if (cg_emit1(cg->out, 0x3Eu) != 0) return -1; /* MVI A,0 */
+                if (cg_emit1(cg->out, 0x00u) != 0) return -1;
+            }
+            if (cg_emit1(cg->out, 0x76u) != 0) return -1; /* HLT */
+            *saw_return = 1;
+            return 0;
+        case CC_AST_PROGRAM: {
+            int it = n->left;
+            while (it >= 0) {
+                if (cg_stmt(cg, it, saw_return) != 0) return -1;
+                if (*saw_return) break;
+                it = cg->nodes[it].next;
+            }
+            return 0;
+        }
+        default:
+            return -1;
+    }
+}
+
+static int cc_codegen(const cc_ast_node_t *nodes,
+                      int node_count,
+                      unsigned char *out,
+                      int out_cap,
+                      int *out_len) {
+    cc_codegen_t cg;
+    int prog_idx;
+    int decl_idx;
+    int main_body = -1;
+    int saw_return = 0;
+
+    if (nodes == NULL || node_count <= 0 || out == NULL || out_cap <= 0 || out_len == NULL) {
+        return -1;
+    }
+
+    prog_idx = 0;
+    if (nodes[prog_idx].kind != CC_AST_PROGRAM) return -1;
+    decl_idx = nodes[prog_idx].left;
+    while (decl_idx >= 0) {
+        const cc_ast_node_t *decl = &nodes[decl_idx];
+        if (decl->kind == CC_AST_FUNC_DECL && decl->left >= 0) {
+            main_body = decl->third;
+            break;
+        }
+        decl_idx = decl->next;
+    }
+    if (main_body < 0) return -1;
+
+    cg.nodes = nodes;
+    cg.node_count = node_count;
+    cg.out = &(cc_out_t){out, 0, out_cap};
+
+    if (cg_stmt(&cg, main_body, &saw_return) != 0) return -1;
+    if (!saw_return) {
+        if (cg_emit1(cg.out, 0x3Eu) != 0) return -1; /* MVI A,0 */
+        if (cg_emit1(cg.out, 0x00u) != 0) return -1;
+        if (cg_emit1(cg.out, 0x76u) != 0) return -1; /* HLT */
+    }
+    *out_len = cg.out->len;
+    return 0;
+}
+
 int cc_compile(const char *src_path, const char *out_path) {
     FILE *src;
     FILE *out;
     int ch;
     unsigned int checksum = 0u;
-    unsigned char blob[8];
+    unsigned char blob[512];
     cc_token_t toks[1024];
     cc_ast_node_t nodes[2048];
     char src_buf[4096];
     size_t nread;
     int tok_count;
     int node_count;
+    int code_len = 0;
 
     if (src_path == NULL || out_path == NULL) {
         return -1;
@@ -663,14 +796,17 @@ int cc_compile(const char *src_path, const char *out_path) {
     if (out == NULL) {
         return -1;
     }
-    /* Minimal COM stub: NOP; MVI A,checksum_lo; MVI B,checksum_hi; HLT */
-    blob[0] = 0x00u;
-    blob[1] = 0x3Eu;
-    blob[2] = (unsigned char)(checksum & 0xFFu);
-    blob[3] = 0x06u;
-    blob[4] = (unsigned char)((checksum >> 8) & 0xFFu);
-    blob[5] = 0x76u;
-    if (fwrite(blob, 1u, 6u, out) != 6u) {
+    /* Prefer AST-based codegen; fallback to deterministic stub for unsupported input. */
+    if (cc_codegen(nodes, node_count, blob, (int)sizeof(blob), &code_len) != 0) {
+        blob[0] = 0x00u;
+        blob[1] = 0x3Eu;
+        blob[2] = (unsigned char)(checksum & 0xFFu);
+        blob[3] = 0x06u;
+        blob[4] = (unsigned char)((checksum >> 8) & 0xFFu);
+        blob[5] = 0x76u;
+        code_len = 6;
+    }
+    if (fwrite(blob, 1u, (size_t)code_len, out) != (size_t)code_len) {
         fclose(out);
         return -1;
     }

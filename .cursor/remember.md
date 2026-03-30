@@ -171,3 +171,6 @@ Implemented `fs_list()` by scanning active directory entries and formatting CP/M
 Implemented `fs_exists()` using normalized CP/M name matching against refreshed directory state.
 Implemented `fs_delete()` to mark entry status `0xE5`, clear allocation map bytes for the extent, persist the directory entry, and invalidate any open handles pointing at that directory slot.
 Extended `tests/fs/test_fs_sector.c` to verify list ordering/content, existence checks, successful delete semantics, and failure on repeated delete attempts.
+## [2026-03-30] fs — Dirty tracking and explicit flush semantics
+Introduced filesystem dirty-state tracking so write paths (`fs_write_sector` and directory-entry persistence) mark the backing disk as dirty instead of forcing immediate `fflush` on each update.
+Updated `fs_flush()` to flush only when dirty and clear the dirty flag on successful sync, aligning behavior with "write dirty sectors back" semantics while preserving existing correctness through explicit flush points and file close.

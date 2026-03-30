@@ -20,6 +20,7 @@ static uint8_t g_dir_active[FS_DIR_ENTRIES];
 static uint8_t g_open_dir_index[FS_OPEN_MAX];
 static uint8_t g_open_in_use[FS_OPEN_MAX];
 static uint16_t g_open_pos[FS_OPEN_MAX];
+static int g_dirty = 0;
 
 static long fs_sector_offset(uint8_t track, uint8_t sector) {
     unsigned long linear_sector = ((unsigned long)track * FS_SECTORS_PER_TRACK) +
@@ -125,9 +126,7 @@ static int fs_persist_directory_entry(uint8_t dir_index) {
     if (fwrite(&g_dir_raw[offset], 1u, FS_DIR_ENTRY_SIZE, g_disk_fp) != FS_DIR_ENTRY_SIZE) {
         return -1;
     }
-    if (fflush(g_disk_fp) != 0) {
-        return -1;
-    }
+    g_dirty = 1;
     return 0;
 }
 
@@ -228,6 +227,7 @@ int fs_init(const char *disk_image_path) {
         (void)fclose(g_disk_fp);
     }
     g_disk_fp = fp;
+    g_dirty = 0;
     fs_reset_open_table();
     if (fs_refresh_directory() != 0) {
         (void)fclose(g_disk_fp);
@@ -494,8 +494,10 @@ int fs_exists(const char *name) {
 }
 
 void fs_flush(void) {
-    if (g_disk_fp != NULL) {
-        (void)fflush(g_disk_fp);
+    if (g_disk_fp != NULL && g_dirty != 0) {
+        if (fflush(g_disk_fp) == 0) {
+            g_dirty = 0;
+        }
     }
 }
 
@@ -534,8 +536,6 @@ int fs_write_sector(uint8_t track, uint8_t sector, const uint8_t *buf) {
     if (fwrite(buf, 1u, FS_BYTES_PER_SECTOR, g_disk_fp) != FS_BYTES_PER_SECTOR) {
         return -1;
     }
-    if (fflush(g_disk_fp) != 0) {
-        return -1;
-    }
+    g_dirty = 1;
     return 0;
 }

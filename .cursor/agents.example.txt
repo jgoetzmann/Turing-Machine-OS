@@ -1,0 +1,11 @@
+# One agent per line:
+#   name: command
+# or just:
+#   command
+#
+# The command should run exactly one agent session and exit.
+# Supervisor will run all listed agents continuously.
+
+compiler: cursor-agent "Work only on compiler tasks in .cursor/progress.md and follow .cursor/rules.mdc."
+kernel: cursor-agent "Work only on kernel tasks in .cursor/progress.md and follow .cursor/rules.mdc."
+visualizer: cursor-agent "Work only on visualizer tasks in .cursor/progress.md and follow .cursor/rules.mdc."

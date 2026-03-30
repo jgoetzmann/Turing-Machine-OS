@@ -18,7 +18,7 @@ SRC := \
 
 OBJ := $(SRC:%.c=$(BUILD_DIR)/%.o)
 
-.PHONY: all run test disk shell clean viz
+.PHONY: all run test disk shell clean viz agents
 
 all: $(TARGET)
 
@@ -58,3 +58,6 @@ clean:
 
 viz:
 	python3 viz/visualizer.py
+
+agents:
+	python3 tools/agent_supervisor.py

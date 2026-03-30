@@ -218,3 +218,6 @@ Current supported subset is intentionally narrow: function body block traversal,
 ## [2026-03-30] compiler/codegen — Added symbol-backed variable load/store
 Extended the code generator to resolve identifier nodes via token/source slices, maintain a fixed-size symbol table, and emit `LDA/STA` for identifier reads and assignments. Variable declarations now allocate symbols and store either initializer values or zero defaults.
 Top-level variable declarations are now reserved at fixed addresses starting at `0x2000` (above TPA entry), satisfying the current global-variable placement milestone while keeping local stack-based variables and control-flow lowering for subsequent tasks.
+## [2026-03-30] compiler/codegen — Local variables lowered as SP-relative storage
+Added distinct global/local symbol tables in codegen and switched local declaration resolution to SP-relative slots. Local identifier loads/stores now emit `LXI H,offset; DAD SP; MOV A,M` and `MOV B,A; LXI H,offset; DAD SP; MOV M,B` patterns, while globals continue to use absolute `LDA/STA`.
+Codegen now emits a simple function prologue `LXI SP,0xFDFF` before function-body lowering so local slots are anchored to the 8080 stack region. This advances local-variable support while preserving existing fallback behavior for still-unsupported control-flow and call semantics.

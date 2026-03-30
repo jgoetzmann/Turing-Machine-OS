@@ -195,8 +195,13 @@ typedef struct {
     struct {
         char name[16];
         uint16_t addr;
-    } symbols[64];
-    int symbol_count;
+    } globals[64];
+    int global_count;
+    struct {
+        char name[16];
+        uint16_t sp_offset;
+    } locals[64];
+    int local_count;
 } cc_codegen_t;
 
 static int p_peek_kind(const cc_parser_t *p) {
@@ -673,40 +678,110 @@ static int cg_ident_name(const cc_codegen_t *cg, int ident_idx, char out_name[16
     return 0;
 }
 
-static int cg_find_symbol(const cc_codegen_t *cg, const char *name) {
+static int cg_find_global(const cc_codegen_t *cg, const char *name) {
     int i;
-    for (i = 0; i < cg->symbol_count; ++i) {
-        if (strcmp(cg->symbols[i].name, name) == 0) {
+    for (i = 0; i < cg->global_count; ++i) {
+        if (strcmp(cg->globals[i].name, name) == 0) {
             return i;
         }
     }
     return -1;
 }
 
-static int cg_add_symbol(cc_codegen_t *cg, const char *name, uint16_t *addr_out) {
+static int cg_find_local(const cc_codegen_t *cg, const char *name) {
+    int i;
+    for (i = cg->local_count - 1; i >= 0; --i) {
+        if (strcmp(cg->locals[i].name, name) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int cg_add_global(cc_codegen_t *cg, const char *name, uint16_t *addr_out) {
     int slot;
     size_t nlen;
-    if (cg->symbol_count >= (int)(sizeof(cg->symbols) / sizeof(cg->symbols[0]))) return -1;
+    if (cg->global_count >= (int)(sizeof(cg->globals) / sizeof(cg->globals[0]))) return -1;
     nlen = strlen(name);
     if (nlen == 0u || nlen > 15u) return -1;
-    slot = cg->symbol_count++;
-    memcpy(cg->symbols[slot].name, name, nlen + 1u);
-    cg->symbols[slot].addr = cg->next_global_addr++;
-    *addr_out = cg->symbols[slot].addr;
+    slot = cg->global_count++;
+    memcpy(cg->globals[slot].name, name, nlen + 1u);
+    cg->globals[slot].addr = cg->next_global_addr++;
+    *addr_out = cg->globals[slot].addr;
     return 0;
 }
 
-static int cg_symbol_addr(cc_codegen_t *cg, int ident_idx, uint16_t *addr_out, int create_if_missing) {
+static int cg_add_local(cc_codegen_t *cg, const char *name, uint16_t *sp_offset_out) {
+    int slot;
+    size_t nlen;
+    if (cg->local_count >= (int)(sizeof(cg->locals) / sizeof(cg->locals[0]))) return -1;
+    nlen = strlen(name);
+    if (nlen == 0u || nlen > 15u) return -1;
+    slot = cg->local_count++;
+    memcpy(cg->locals[slot].name, name, nlen + 1u);
+    cg->locals[slot].sp_offset = (uint16_t)(cg->local_count - 1);
+    *sp_offset_out = cg->locals[slot].sp_offset;
+    return 0;
+}
+
+typedef struct {
+    int is_local;
+    uint16_t value;
+} cg_symbol_ref_t;
+
+static int cg_symbol_resolve(cc_codegen_t *cg,
+                             int ident_idx,
+                             int want_local,
+                             int create_if_missing,
+                             cg_symbol_ref_t *out_ref) {
     char name[16];
     int slot;
     if (cg_ident_name(cg, ident_idx, name) != 0) return -1;
-    slot = cg_find_symbol(cg, name);
+    slot = cg_find_local(cg, name);
     if (slot >= 0) {
-        *addr_out = cg->symbols[slot].addr;
+        out_ref->is_local = 1;
+        out_ref->value = cg->locals[slot].sp_offset;
+        return 0;
+    }
+    slot = cg_find_global(cg, name);
+    if (slot >= 0 && !want_local) {
+        out_ref->is_local = 0;
+        out_ref->value = cg->globals[slot].addr;
         return 0;
     }
     if (!create_if_missing) return -1;
-    return cg_add_symbol(cg, name, addr_out);
+    if (want_local) {
+        out_ref->is_local = 1;
+        return cg_add_local(cg, name, &out_ref->value);
+    }
+    out_ref->is_local = 0;
+    return cg_add_global(cg, name, &out_ref->value);
+}
+
+static int cg_emit_load_ref(cc_codegen_t *cg, const cg_symbol_ref_t *ref) {
+    if (ref->is_local) {
+        if (cg_emit1(cg->out, 0x21u) != 0) return -1; /* LXI H,imm16 */
+        if (cg_emit_addr16(cg->out, ref->value) != 0) return -1;
+        if (cg_emit1(cg->out, 0x39u) != 0) return -1; /* DAD SP */
+        if (cg_emit1(cg->out, 0x7Eu) != 0) return -1; /* MOV A,M */
+        return 0;
+    }
+    if (cg_emit1(cg->out, 0x3Au) != 0) return -1; /* LDA addr */
+    return cg_emit_addr16(cg->out, ref->value);
+}
+
+static int cg_emit_store_ref(cc_codegen_t *cg, const cg_symbol_ref_t *ref) {
+    if (ref->is_local) {
+        if (cg_emit1(cg->out, 0x47u) != 0) return -1; /* MOV B,A */
+        if (cg_emit1(cg->out, 0x21u) != 0) return -1; /* LXI H,imm16 */
+        if (cg_emit_addr16(cg->out, ref->value) != 0) return -1;
+        if (cg_emit1(cg->out, 0x39u) != 0) return -1; /* DAD SP */
+        if (cg_emit1(cg->out, 0x70u) != 0) return -1; /* MOV M,B */
+        if (cg_emit1(cg->out, 0x78u) != 0) return -1; /* MOV A,B */
+        return 0;
+    }
+    if (cg_emit1(cg->out, 0x32u) != 0) return -1; /* STA addr */
+    return cg_emit_addr16(cg->out, ref->value);
 }
 
 static int cg_expr(cc_codegen_t *cg, int idx);
@@ -744,20 +819,17 @@ static int cg_expr(cc_codegen_t *cg, int idx) {
         case CC_AST_BINOP:
             return cg_binop(cg, idx);
         case CC_AST_IDENT: {
-            uint16_t addr;
-            if (cg_symbol_addr(cg, idx, &addr, 0) != 0) return -1;
-            if (cg_emit1(cg->out, 0x3Au) != 0) return -1; /* LDA addr */
-            return cg_emit_addr16(cg->out, addr);
+            cg_symbol_ref_t ref;
+            if (cg_symbol_resolve(cg, idx, 0, 0, &ref) != 0) return -1;
+            return cg_emit_load_ref(cg, &ref);
         }
         case CC_AST_ASSIGN: {
-            uint16_t addr;
+            cg_symbol_ref_t ref;
             if (!cg_node_ok(cg, n->left)) return -1;
             if (cg->nodes[n->left].kind != CC_AST_IDENT) return -1;
             if (cg_expr(cg, n->right) != 0) return -1;
-            if (cg_symbol_addr(cg, n->left, &addr, 1) != 0) return -1;
-            if (cg_emit1(cg->out, 0x32u) != 0) return -1; /* STA addr */
-            if (cg_emit_addr16(cg->out, addr) != 0) return -1;
-            return 0;
+            if (cg_symbol_resolve(cg, n->left, 0, 1, &ref) != 0) return -1;
+            return cg_emit_store_ref(cg, &ref);
         }
         default:
             return -1;
@@ -789,18 +861,17 @@ static int cg_stmt(cc_codegen_t *cg, int idx, int *saw_return) {
             return 0;
         }
         case CC_AST_VAR_DECL: {
-            uint16_t addr;
+            cg_symbol_ref_t ref;
             if (!cg_node_ok(cg, n->left)) return -1;
             if (cg->nodes[n->left].kind != CC_AST_IDENT) return -1;
-            if (cg_symbol_addr(cg, n->left, &addr, 1) != 0) return -1;
+            if (cg_symbol_resolve(cg, n->left, 1, 1, &ref) != 0) return -1;
             if (n->right >= 0) {
                 if (cg_expr(cg, n->right) != 0) return -1;
             } else {
                 if (cg_emit1(cg->out, 0x3Eu) != 0) return -1; /* MVI A,0 */
                 if (cg_emit1(cg->out, 0x00u) != 0) return -1;
             }
-            if (cg_emit1(cg->out, 0x32u) != 0) return -1; /* STA addr */
-            return cg_emit_addr16(cg->out, addr);
+            return cg_emit_store_ref(cg, &ref);
         }
         case CC_AST_ASSIGN:
         case CC_AST_BINOP:
@@ -853,18 +924,22 @@ static int cc_codegen(const cc_ast_node_t *nodes,
     cg.token_count = token_count;
     cg.out = &(cc_out_t){out, 0, out_cap};
     cg.next_global_addr = 0x2000u;
-    cg.symbol_count = 0;
+    cg.global_count = 0;
+    cg.local_count = 0;
 
     /* Reserve top-level globals at fixed addresses above TPA entry. */
     decl_idx = nodes[prog_idx].left;
     while (decl_idx >= 0) {
         const cc_ast_node_t *decl = &nodes[decl_idx];
         if (decl->kind == CC_AST_VAR_DECL && decl->left >= 0) {
-            uint16_t addr;
-            if (cg_symbol_addr(&cg, decl->left, &addr, 1) != 0) return -1;
+            cg_symbol_ref_t ref;
+            if (cg_symbol_resolve(&cg, decl->left, 0, 1, &ref) != 0) return -1;
         }
         decl_idx = decl->next;
     }
+
+    if (cg_emit1(cg.out, 0x31u) != 0) return -1; /* LXI SP,imm16 */
+    if (cg_emit_addr16(cg.out, 0xFDFFu) != 0) return -1;
 
     if (cg_stmt(&cg, main_body, &saw_return) != 0) return -1;
     if (!saw_return) {

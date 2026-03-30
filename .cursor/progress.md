@@ -108,7 +108,7 @@
 - [x] P3-04 Implement AST for: variable decl, assignment, arithmetic expr, if/else, while, for, function decl/call, return
 - [~] P3-05 Implement code generator — walk AST, emit 8080 instructions
 - [x] P3-06 Code gen: global variables (at fixed addresses above TPA entry)
-- [ ] P3-07 Code gen: local variables (on 8080 stack)
+- [x] P3-07 Code gen: local variables (on 8080 stack)
 - [ ] P3-08 Code gen: arithmetic (+, -, *, /)
 - [ ] P3-09 Code gen: comparisons and conditional jumps
 - [ ] P3-10 Code gen: while loop, for loop

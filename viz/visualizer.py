@@ -35,8 +35,8 @@ BLINK_MS = 500
 DIRTY_DECAY_MS = 450
 SNAPSHOT_PREFIX = "snapshot_"
 SNAPSHOT_SUFFIX = ".bin"
-SPLASH_POLL_MS = 1000
-TARGET_FPS = 10
+POLL_MS = 100
+TARGET_FPS = 30
 
 STATE_NAMES = {
     0: "BOOT",
@@ -263,22 +263,22 @@ def main() -> int:
             last_ticks = now_ticks
             if not paused:
                 poll_accum_ms += dt_ms
-            should_poll = (not paused) and (poll_accum_ms >= SPLASH_POLL_MS or tape is blank_tape)
+            should_poll = (not paused) and (poll_accum_ms >= POLL_MS or tape is blank_tape)
             if should_poll:
                 poll_accum_ms = 0
                 tape_cur = tape_bridge.get_tape()
                 if tape_cur is not None and len(tape_cur) >= TAPE_SIZE:
                     tape = tape_cur
-                else:
-                    tape = blank_tape
-                meta = tape_bridge.get_meta()
+                # Keep the previous frame when snapshot files are mid-write.
+                # This avoids visible flicker between valid frames.
+                meta_cur = tape_bridge.get_meta()
+                if meta_cur is not None:
+                    meta = meta_cur
             _update_dirty_decay(dirty_decay_ms, dt_ms, meta)
             if should_poll:
                 pc_cur = tape_bridge.get_pc()
                 if pc_cur is not None:
                     pc = pc_cur
-                else:
-                    pc = 0
             has_tape = tape is not blank_tape
             if has_tape:
                 if selected_page_override is None:

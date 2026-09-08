@@ -9,7 +9,7 @@ cd "$(dirname "$0")/../.." || exit 1
 hits=$(grep -ril pygame . \
   --exclude-dir=.git --exclude-dir=build --exclude-dir=node_modules \
   --exclude-dir=dist --exclude-dir=.fullsend --exclude-dir=generated \
-  --exclude=decisions.md --exclude=v2-roadmap.md --exclude=how-it-was-built.md \
+  --exclude=decisions.md --exclude=v2-roadmap.md \
   --exclude=v2_ws9_01_no_pygame.sh 2>/dev/null)
 rc=$?
 [ "$rc" -le 1 ] || { echo "FAIL: WS9-01 grep failed with status $rc"; exit 1; }

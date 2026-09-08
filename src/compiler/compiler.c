@@ -53,6 +53,9 @@ static const char MSG_LOCALS[]    = "too many locals";
 static const char MSG_LARGE[]     = "program too large";
 static const char MSG_UNEXP[]     = "unexpected token";
 static const char MSG_LOCARR[]    = "local arrays are not supported";
+static const char MSG_NESTING[]   = "expression nests too deeply";
+static const char MSG_ARGCOUNT[]  = "wrong number of arguments";
+static const char MSG_AT_INIT[]   = "__at variables cannot have an initialiser";
 
 static void diag_set(cc_diag_t *d, uint32_t line, uint32_t col, const char *msg, const char *name) {
     if (d == NULL || d->set) return;
@@ -460,7 +463,12 @@ typedef struct {
     int max_nodes;
     cc_diag_t *diag;
     int failed;
+    int depth;                /* nested sub-expressions in flight; the parser recurses per level */
 } cc_par_t;
+
+/* Recursive descent costs a C stack frame per nesting level, so the source has to be bounded
+   somewhere. 96 levels is far past anything readable and far short of the smallest stack. */
+#define CC_MAX_DEPTH 96
 
 static int p_kind(const cc_par_t *p) {
     if (p->pos < 0 || p->pos >= p->ntok) return (int)CC_TOK_EOF;
@@ -540,6 +548,16 @@ static int p_is_assign_op(int k) {
            k == (int)CC_TOK_SHL_ASSIGN || k == (int)CC_TOK_SHR_ASSIGN;
 }
 
+/* A sub-expression one level down: argument, index or parenthesised group. */
+static int p_sub_expr(cc_par_t *p) {
+    int e;
+    if (p->depth >= CC_MAX_DEPTH) return p_fail(p, p->pos, MSG_NESTING);
+    p->depth++;
+    e = p_expr(p);
+    p->depth--;
+    return e;
+}
+
 static int p_primary(cc_par_t *p) {
     int tok_i = p->pos;
     int node;
@@ -574,7 +592,7 @@ static int p_primary(cc_par_t *p) {
             p->pos++; /* '(' */
             if (!p_match(p, CC_TOK_RPAREN)) {
                 for (;;) {
-                    int arg = p_expr(p);
+                    int arg = p_sub_expr(p);
                     if (arg < 0) return -1;
                     if (first < 0) first = arg;
                     else p->nodes[last].next = arg;
@@ -594,7 +612,7 @@ static int p_primary(cc_par_t *p) {
             ident = p_new(p, CC_AST_IDENT, tok_i);
             if (ident < 0) return -1;
             p->pos++; /* '[' */
-            e = p_expr(p);
+            e = p_sub_expr(p);
             if (e < 0) return -1;
             if (!p_expect(p, CC_TOK_RBRACKET)) return -1;
             p->nodes[index].left = ident;
@@ -605,7 +623,7 @@ static int p_primary(cc_par_t *p) {
         return ident;
     }
     if (p_match(p, CC_TOK_LPAREN)) {
-        int e = p_expr(p);
+        int e = p_sub_expr(p);
         if (e < 0) return -1;
         if (!p_expect(p, CC_TOK_RPAREN)) return -1;
         return e;
@@ -634,13 +652,16 @@ static int p_postfix(cc_par_t *p) {
 }
 
 static int p_unary(cc_par_t *p) {
+    if (p->depth >= CC_MAX_DEPTH) return p_fail(p, p->pos, MSG_NESTING);
     int tok_i = p->pos;
     int k = p_kind(p);
     if (k == (int)CC_TOK_MINUS || k == (int)CC_TOK_NOT || k == (int)CC_TOK_TILDE || k == (int)CC_TOK_PLUS ||
         k == (int)CC_TOK_INC || k == (int)CC_TOK_DEC) {
         int node, rhs;
         p->pos++;
+        p->depth++;
         rhs = p_unary(p);
+        p->depth--;
         if (rhs < 0) return -1;
         if ((k == (int)CC_TOK_INC || k == (int)CC_TOK_DEC) &&
             p->nodes[rhs].kind != CC_AST_IDENT && p->nodes[rhs].kind != CC_AST_INDEX) {
@@ -1208,6 +1229,7 @@ static struct {
     int rt_used[RT_COUNT];
     int rt_addr[RT_COUNT];
     int rt_emitted[RT_COUNT];
+    int expr_depth;           /* gen_expr nesting; the AST can be as deep as the source allows */
 } G;
 
 static void cg_err_tok(uint32_t tok_i, const char *msg, const char *name) {
@@ -1718,6 +1740,7 @@ static void emit_runtime(void) {
 /* ---- expressions ---- */
 
 static void gen_expr(int idx);
+static void gen_expr_inner(int idx);
 static void gen_expr_discard(int idx);
 
 /* Binary operator with DE = left operand, HL = right operand -> HL. */
@@ -2262,7 +2285,7 @@ static void gen_intrinsic(int id, int idx, int want) {
         case IN_SELDISK:
             gen_arg_to_c(a0);
             e_bios(0x09u);
-            gen_zero_if(want);
+            e_a_to_hl();                /* 0 = selected, 1 = no such disk */
             break;
         case IN_LISTDIR:
             e_bios(0x0Fu);
@@ -2318,6 +2341,10 @@ static void gen_call(int idx, int want) {
         e_push_h();
         nargs++;
     }
+    if (nargs != G.funcs[f].nparams) {
+        cg_err_node(n->left, MSG_ARGCOUNT, name);
+        return;
+    }
     e_call_fn(f);
     while (nargs-- > 0) e_pop_d();
 }
@@ -2340,6 +2367,17 @@ static void gen_logical(int idx) {
 }
 
 static void gen_expr(int idx) {
+    if (G.failed) return;
+    if (G.expr_depth >= CC_MAX_DEPTH) {
+        cg_err_node(idx, MSG_NESTING, NULL);
+        return;
+    }
+    G.expr_depth++;
+    gen_expr_inner(idx);
+    G.expr_depth--;
+}
+
+static void gen_expr_inner(int idx) {
     const cc_ast_node_t *n;
     int32_t cv;
     if (G.failed) return;
@@ -2738,6 +2776,12 @@ static int collect_decls(void) {
                 }
                 g->is_at = 1;
                 g->at_addr = av & 0xFFFF;
+                /* An __at variable names memory the program does not own an image of, so there is
+                   nowhere to put an initialiser. Say so instead of dropping it. */
+                if (n->right >= 0) {
+                    cg_err_node(it, MSG_AT_INIT, NULL);
+                    return -1;
+                }
             } else {
                 g->offset = G.data_size;
                 G.data_size += g->is_char ? g->count : g->count * 2;
@@ -2794,6 +2838,8 @@ static int emit_data(void) {
                 const cc_token_t *t = &G.toks[init->token_index];
                 int nb = decode_escaped(G.src + t->offset + 1u, t->length - 2u, buf, CC_STRPOOL);
                 int32_t e;
+                if (nb > (int)sizeof buf) nb = (int)sizeof buf;   /* decode_escaped reports the
+                    full decoded length, but it only ever wrote sizeof buf bytes */
                 for (e = 0; e < (int32_t)nb && e < g->count; ++e) put_elem(start, g->is_char, e, (int32_t)buf[e]);
             } else {
                 int e;

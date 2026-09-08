@@ -163,6 +163,7 @@ static void run_case(const case_spec_t *spec) {
 
 int main(void) {
     const char *filter = NULL;
+    int ran = 0;
     if (system("mkdir -p " BUILD_DIR) != 0) failf("failed to create build dir", BUILD_DIR);
     if (getenv("CC_CASE") != NULL && getenv("CC_CASE")[0] != '\0') {
         filter = getenv("CC_CASE");
@@ -170,7 +171,11 @@ int main(void) {
     for (size_t i = 0; i < sizeof(k_cases) / sizeof(k_cases[0]); ++i) {
         if (filter != NULL && strcmp(filter, k_cases[i].name) != 0) continue;
         run_case(&k_cases[i]);
+        ran++;
     }
+    /* A CC_CASE nobody recognises used to run zero cases and still print PASS, which turned every
+       shell wrapper that passes one into a no-op the moment a case was renamed. */
+    if (ran == 0) failf("no case ran", filter != NULL ? filter : "(no filter)");
     puts("PASS: test_expected_outputs");
     return 0;
 }

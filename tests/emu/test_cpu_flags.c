@@ -38,7 +38,9 @@ int main(void) {
         return 1;
     }
 
-    /* SUB boundary: 0x00 - 0x01 = 0xFF, S+CY+AC set, Z clear */
+    /* SUB boundary: 0x00 - 0x01 = 0xFF, S+CY set, Z clear. AC stays CLEAR: the 8080
+       subtracts by adding the two's complement, and 0x0 + 0xE + 1 = 0xF carries nothing
+       out of bit 3. */
     mem_write(0x0005u, 0x3Eu); /* MVI A,0x00 */
     mem_write(0x0006u, 0x00u);
     mem_write(0x0007u, 0x06u); /* MVI B,0x01 */
@@ -49,10 +51,24 @@ int main(void) {
     cpu_step(&cpu);
     assert_u8("SUB result", 0xFFu, cpu.a);
     if ((cpu.flags & FLAG_S) == 0u || (cpu.flags & FLAG_CY) == 0u ||
-        (cpu.flags & FLAG_AC) == 0u || (cpu.flags & FLAG_Z) != 0u) {
+        (cpu.flags & FLAG_AC) != 0u || (cpu.flags & FLAG_Z) != 0u) {
         fprintf(stderr, "FAIL: SUB boundary flags mismatch\n");
         return 1;
     }
+
+    /* The other side of the same rule: 0x1F - 0x01 = 0x1E borrows nothing from bit 4, so AC is
+       set. Without both cases a flipped AC still passes. */
+    cpu.a = 0x1Fu;
+    cpu.b = 0x01u;
+    cpu.pc = 0x0080u;
+    mem_write(0x0080u, 0x90u); /* SUB B */
+    cpu_step(&cpu);
+    assert_u8("SUB no-borrow result", 0x1Eu, cpu.a);
+    if ((cpu.flags & FLAG_AC) == 0u) {
+        fprintf(stderr, "FAIL: SUB without a half-borrow must set AC\n");
+        return 1;
+    }
+    cpu.pc = 0x000Au;
 
     /* AND boundary: AC set, CY clear */
     mem_write(0x000Au, 0x3Eu); /* MVI A,0xF0 */

@@ -64,7 +64,9 @@ int snapshot_save(const kernel_t *k)
     if (k == NULL) {
         return -1;
     }
-    idx = g_seq % SNAPSHOT_SLOTS;        /* overwrites the oldest slot once the ring is full */
+    /* Slot 0 keeps the first snapshot ever taken, the anchor a seek to an early step needs;
+       the rest of the ring rotates and overwrites its own oldest slot. */
+    idx = (g_seq == 0u) ? 0u : (1u + ((g_seq - 1u) % (SNAPSHOT_SLOTS - 1u)));
     s = &g_slots[idx];
     tapes = mem_tape_count();
     if (tapes > TOS_TAPES_MAX) {
@@ -132,6 +134,21 @@ int snapshot_restore(kernel_t *k, int slot)
     k->cfg = cfg;
     memcpy(k->bps, bps, sizeof(bps));
     k->bp_hit = -1;
+
+    /* The ages and the dirty map are not in the snapshot, so anything stamped after the step we
+       just restored describes a future that no longer happened: forget it. */
+    {
+        uint8_t tt;
+        for (tt = 0u; tt < s->tapes; tt++) {
+            uint32_t *wa = mem_write_age(tt);
+            uint32_t *ra = mem_read_age(tt);
+            uint32_t a;
+            for (a = 0u; a < TOS_TAPE_MAX; a++) {
+                if (wa != NULL && wa[a] > s->step) wa[a] = 0u;
+                if (ra != NULL && ra[a] > s->step) ra[a] = 0u;
+            }
+        }
+    }
 
     mem_clear_fault();
     if (s->sel < mem_tape_count()) {

@@ -130,6 +130,12 @@ kbd {
   outline-offset: 2px;
 }
 
+/* Anything toggled with the `hidden` property stays hidden: a class that sets `display` would
+   otherwise outrank the user-agent rule and leave the element on screen. */
+[hidden] {
+  display: none !important;
+}
+
 .visually-hidden {
   position: absolute !important;
   width: 1px;

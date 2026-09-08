@@ -626,6 +626,25 @@ export class Engine {
     return this.module.UTF8ToString(this.module._tos_syscall_name(fn & 0xff));
   }
 
+  /** Indices of the transitions that leave SYSCALL for code, computed once from the table. */
+  private syscallDoneEdges: number[] | null = null;
+
+  /** How many BIOS calls have run to completion. A syscall is dispatched inside the step that
+   *  issues `OUT 01`, so SYSCALL is never the state on return: this counter is the only way to
+   *  see a syscall go by from outside. */
+  syscallsDone(): number {
+    const m = this.module;
+    if (this.syscallDoneEdges === null) {
+      this.syscallDoneEdges = this.transitions()
+        .map((t, i) => ({ t, i }))
+        .filter(({ t }) => t.from === STATE.SYSCALL && (t.to === STATE.SHELL || t.to === STATE.RUNNING))
+        .map(({ i }) => i);
+    }
+    let n = 0;
+    for (const i of this.syscallDoneEdges) n += u32(m._tos_transition_fired(i));
+    return n;
+  }
+
   transitions(): Transition[] {
     const m = this.module;
     const n = m._tos_transition_count();

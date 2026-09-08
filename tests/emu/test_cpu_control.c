@@ -31,17 +31,18 @@ int main(void) {
     cpu_step(&cpu);
     assert_u8("DI clears interrupt flag", 0u, cpu.interrupts_enabled);
 
-    /* RIM reads rim_value into A */
-    cpu.rim_value = 0x5Au;
-    mem_write(0x0002u, 0x20u); /* RIM */
-    cpu_step(&cpu);
-    assert_u8("RIM loads A", 0x5Au, cpu.a);
-
-    /* SIM stores A into sim_value */
+    /* 20H and 30H are RIM and SIM on the 8085. On an 8080 they are NOPs (SPEC WS1-05), so they
+       must leave A, rim_value and sim_value exactly as they were. */
     cpu.a = 0xA5u;
-    mem_write(0x0003u, 0x30u); /* SIM */
+    cpu.rim_value = 0x5Au;
+    cpu.sim_value = 0x11u;
+    mem_write(0x0002u, 0x20u); /* 8085 RIM */
     cpu_step(&cpu);
-    assert_u8("SIM stores A", 0xA5u, cpu.sim_value);
+    assert_u8("20H leaves A alone", 0xA5u, cpu.a);
+    mem_write(0x0003u, 0x30u); /* 8085 SIM */
+    cpu_step(&cpu);
+    assert_u8("30H leaves sim_value alone", 0x11u, cpu.sim_value);
+    assert_u8("30H leaves A alone", 0xA5u, cpu.a);
 
     /* RST 3 pushes return and jumps to 0x18 */
     cpu.sp = 0x2100u;

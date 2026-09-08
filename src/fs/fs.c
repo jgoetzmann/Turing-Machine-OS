@@ -282,6 +282,51 @@ static int fs_alloc_block(uint8_t disk)
     return -1;
 }
 
+/* Data blocks not referenced by any active entry. Block 0 is the directory. */
+static uint32_t fs_free_blocks(uint8_t disk)
+{
+    static uint8_t used[FS_BLOCK_COUNT];
+    uint32_t i;
+    uint32_t j;
+    uint32_t free_count = 0u;
+
+    memset(used, 0, sizeof(used));
+    used[0] = 1u;
+    for (i = 0u; i < FS_DIR_ENTRIES; ++i) {
+        const uint8_t *e = fs_entry(disk, i);
+        if (!fs_entry_active(e)) {
+            continue;
+        }
+        for (j = 0u; j < FS_ENTRY_BLOCKS; ++j) {
+            uint8_t b = e[FS_E_ALLOC + j];
+            if (b != 0u && b < FS_BLOCK_COUNT) {
+                used[b] = 1u;
+            }
+        }
+    }
+    for (i = 1u; i < FS_BLOCK_COUNT; ++i) {
+        if (used[i] == 0u) {
+            free_count++;
+        }
+    }
+    return free_count;
+}
+
+/* Data blocks the entry at `idx` holds; they come back when it is deleted. */
+static uint32_t fs_entry_block_count(uint8_t disk, uint32_t idx)
+{
+    const uint8_t *e = fs_entry(disk, idx);
+    uint32_t j;
+    uint32_t n = 0u;
+
+    for (j = 0u; j < FS_ENTRY_BLOCKS; ++j) {
+        if (e[FS_E_ALLOC + j] != 0u) {
+            n++;
+        }
+    }
+    return n;
+}
+
 static void fs_format_image(uint8_t disk)
 {
     memset(&g_img[disk][0], (int)FS_DELETED, FS_DIR_BYTES);
@@ -800,6 +845,13 @@ int fs_put_file(const char *name, const uint8_t *data, uint32_t len)
     }
     idx = fs_find(g_selected, cpm);
     if (idx >= 0) {
+        /* Overwriting must not destroy the file it replaces: check the new contents fit in the
+           free space plus the blocks this entry will give back, before deleting anything. */
+        const uint32_t need = (len + FS_BLOCK_BYTES - 1u) / FS_BLOCK_BYTES;
+        const uint32_t have = fs_free_blocks(g_selected) + fs_entry_block_count(g_selected, (uint32_t)idx);
+        if (need > have) {
+            return -1;
+        }
         fs_delete_index(g_selected, (uint32_t)idx);
     }
     fh = fs_create(name);

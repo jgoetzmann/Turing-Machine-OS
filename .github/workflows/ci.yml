@@ -2,6 +2,7 @@
 #   native   : `make test` on ubuntu-latest and macos-latest
 #   sanitize : `make test` under AddressSanitizer + UndefinedBehaviorSanitizer on ubuntu
 #   web      : wasm build (Emscripten pinned in web/emsdk-version.txt) + Node tests + Vite build
+#              + the Cypress end-to-end suite against the built site
 name: CI
 
 on:
@@ -64,3 +65,12 @@ jobs:
         run: make test-web
       - name: Build the site
         run: cd web && npm run build
+      - name: Cache the Cypress binary
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Cypress
+          key: cypress-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+      - name: Install the Cypress binary
+        run: cd web && npx cypress install
+      - name: End-to-end tests in a headless browser
+        run: cd web && npm run e2e

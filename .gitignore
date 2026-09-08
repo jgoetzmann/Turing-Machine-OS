@@ -1,5 +1,4 @@
 build/
-viz/.venv/
 .fullsend/
 web/node_modules/
 web/dist/
@@ -7,4 +6,7 @@ web/public/turingos.js
 web/public/turingos.wasm
 web/public/demo.img
 web/src/generated/
+web/cypress/downloads/
+web/cypress/screenshots/
+web/cypress/videos/
 snapshot_*.bin

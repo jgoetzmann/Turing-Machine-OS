@@ -315,7 +315,7 @@ static int t_ws1_05_nop_aliases(void)
         ASSERT(c.halted == 0);
         ASSERT(c.b == ref.b && c.c == ref.c && c.d == ref.d && c.e == ref.e && c.h == ref.h && c.l == ref.l);
         ASSERT(c.flags == ref.flags);
-        if (alias[i] != 0x20 && alias[i] != 0x30) ASSERT(c.a == ref.a);   /* 20H/30H also serve as RIM/SIM, which touch A */
+        ASSERT(c.a == ref.a);           /* every alias, 20H and 30H included, leaves A alone */
         ASSERT(mem_peek(0, 0x0101) == 0x11 && mem_peek(0, 0x0102) == 0x22); /* operand bytes untouched */
     }
     return 0;

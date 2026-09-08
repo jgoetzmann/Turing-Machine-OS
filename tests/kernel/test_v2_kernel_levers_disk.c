@@ -3,8 +3,8 @@
 #include "../testfw.h"
 #include "api/api.h"
 #include "bios/bios.h"
+#include "hal/hal.h"
 #include <string.h>
-#include <time.h>
 
 #define MAX_STEPS 2000000u
 
@@ -58,8 +58,8 @@ static const uint8_t SPIN[] = { 0xC3, 0x00, 0x01 };            /* 0100: JMP 0100
 /* ---- WS4-03 ----------------------------------------------------------- */
 static int t_hz_lever_no_sleep(void) {
     tos_config_t cfg;
-    clock_t t0;
-    double ms;
+    uint32_t t0;
+    uint32_t ms;
     uint32_t s0, c0;
     kernel_config_default(&cfg);
     ASSERT(tos_create(&cfg) == 0);
@@ -73,11 +73,12 @@ static int t_hz_lever_no_sleep(void) {
     ASSERT(tos_step(1) == 1u);
     ASSERT(meta_u32(TOS_META_HZ) == 2000000u);
     c0 = tos_cycles_lo();
-    t0 = clock();
+    /* Wall time, not processor time: a kernel that slept would burn no CPU and pass a clock() test. */
+    t0 = hal_time_ms();
     ASSERT(run_bounded(40000u) == KSTOP_BUDGET);                /* 40,000 x JMP = 400,000 cycles; 200 ms at 2 MHz if throttled */
-    ms = (double)(clock() - t0) * 1000.0 / (double)CLOCKS_PER_SEC;
+    ms = hal_time_ms() - t0;
     ASSERT(tos_cycles_lo() - c0 >= 400000u);
-    ASSERT(ms < 100.0);
+    ASSERT(ms < 100u);
     ASSERT(tos_steps() == s0 + 1u + 40000u);
     return 0;
 }

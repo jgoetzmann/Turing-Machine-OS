@@ -238,6 +238,7 @@ static void svc_write(cpu_t *cpu) {
         cpu->a = 1u;
         return;
     }
+    fs_flush();     /* write-through, like the compile path: the image on the host stays current */
     cpu->a = 0u;
 }
 
@@ -344,7 +345,9 @@ static void svc_del(void) {
     }
     if (fs_delete(name) != 0) {
         out_bad();
+        return;
     }
+    fs_flush();     /* a delete the host never sees is a delete that did not happen */
 }
 
 /* lang: TOS_LANG_C / TOS_LANG_ASM / TOS_LANG_TM / TOS_LANG_BF */

@@ -157,7 +157,7 @@ static int t_too_many_locals(void)
     const char *head = "int main() {\n";
     const char *tail = "  return 0;\n}\n";
     memcpy(g_src + pos, head, strlen(head)); pos += strlen(head);
-    for (i = 0; i < 40; i++) { pos += (size_t)sprintf(g_src + pos, "  int v%d;\n", i); }
+    for (i = 0; i < 40; i++) { pos += (size_t)snprintf(g_src + pos, sizeof g_src - pos, "  int v%d;\n", i); }
     memcpy(g_src + pos, tail, strlen(tail)); pos += strlen(tail);
     g_src[pos] = 0;
     len = compile_c(g_src);

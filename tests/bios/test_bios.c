@@ -95,7 +95,8 @@ int main(void) {
     assert_u8("SETDMA high", 0x12u, (unsigned int)(bios_dma_addr() >> 8));
     assert_u8("SETDMA low", 0x34u, (unsigned int)(bios_dma_addr() & 0xFFu));
 
-    /* READ/WRITE delegate to FS hooks; current FS stubs report failure (A=1). */
+    /* No disk is mounted in this test (no fs_init), so READ and WRITE report failure with
+       A=1. The success path lives in tests/fs and tests/kernel. */
     cpu.a = 0x0Du; /* READ */
     cpu.io_out_value = cpu.a; cpu.io_out_pending = 1u;
     cpu.io_out_pending = 1u;

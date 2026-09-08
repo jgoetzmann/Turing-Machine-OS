@@ -236,7 +236,11 @@ export function renderPlaygroundPage(mount: HTMLElement, ctx: AppContext, route:
   }
   function renderTour(): void {
     for (const slot of grid.querySelectorAll<HTMLElement>('.slot')) slot.classList.remove('tour-target');
-    if (tourSteps.length === 0) return;
+    if (tourSteps.length === 0) {
+      tourText.textContent = '';
+      tourPos.value = '';
+      return;
+    }
     const step = tourSteps[tourIndex];
     tourText.textContent = step.text;
     tourPos.value = `${tourIndex + 1} / ${tourSteps.length}`;
@@ -314,7 +318,7 @@ export function renderPlaygroundPage(mount: HTMLElement, ctx: AppContext, route:
     const cpu = e.cpu();
     const parts = [
       app.running ? `Running (${formatSpeed(app.speed)})` : 'Paused',
-      stateNameOf(e.state()),
+      app.waitingForInput ? `${stateNameOf(e.state())} (waiting for input)` : stateNameOf(e.state()),
       `step ${e.steps().toLocaleString()}`,
       `PC ${hex16(cpu.pc)}`,
       `frame ${e.frame()}`,

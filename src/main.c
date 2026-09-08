@@ -261,6 +261,10 @@ int main(int argc, char **argv)
         if (stop == (int)KSTOP_HALT) {
             break;
         }
+        if (stop == (int)KSTOP_VSYNC) {
+            hal_vsync();          /* the frame the machine just finished: pace it here, not in the kernel */
+            continue;
+        }
         if (stop == (int)KSTOP_WAIT_INPUT) {
             /* Only reached on a TTY with nothing typed: the posix HAL blocks inside
              * hal_con_in_ready() when stdin is a pipe or file, so scripts never spin here. */

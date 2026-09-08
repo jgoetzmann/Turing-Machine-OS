@@ -66,8 +66,8 @@ export function createTimelinePanel(root: HTMLElement, engine: Engine, bus: Bus)
   function emitSeek(step: number): void {
     step = Math.max(0, Math.floor(step));
     requested = step;
-    bus.emit('seek', { step });
-    bus.emit('run-state', { running: false });
+    // `seek` is the app's notification that a seek happened; `seek-request` is what asks for one.
+    bus.emit('seek-request', { step });
   }
 
   const onInput = (): void => {
@@ -111,7 +111,7 @@ export function createTimelinePanel(root: HTMLElement, engine: Engine, bus: Bus)
   };
   const onLive = (): void => {
     requested = -1;
-    bus.emit('run-state', { running: true });
+    bus.emit('run-request', { running: true });
   };
 
   range.addEventListener('input', onInput);

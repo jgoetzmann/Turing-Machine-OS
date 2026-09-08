@@ -127,7 +127,7 @@ export class App {
   private _lastEvent = '';
   private _lastEventAt = 0;
   private startState = 0;
-  private seenSyscall = false;
+  private syscallMark = 0;
   private booted = false;
 
   private panels = new Map<PanelName, Panel>();
@@ -158,6 +158,14 @@ export class App {
       this.bus.on('seek-request', (p: { step?: number }) => {
         if (p && typeof p.step === 'number') this.seek(p.step);
       }),
+      this.bus.on('run-request', (p: { running?: boolean }) => {
+        if (p && p.running === false) this.pause();
+        else this.run();
+      }),
+      this.bus.on('breakpoints-clear-request', () => this.clearBreakpoints()),
+      // A lever moved in the levers panel: the hash has to follow, or the link no longer
+      // describes the machine on screen.
+      this.bus.on('lever', () => this.syncUrl()),
       this.bus.on('machine-reset', () => {
         if (this.resetting) return;
         // A lever panel reset the machine behind our back: restore what the kernel forgot.
@@ -188,6 +196,10 @@ export class App {
   }
   get lastStop(): StopReason {
     return this._lastStop;
+  }
+  /** Parked in WAIT_INPUT: the machine cannot advance until a byte reaches the console. */
+  get waitingForInput(): boolean {
+    return this._lastStop === STOP.WAIT_INPUT && this.engine.state() === STATE.IDLE;
   }
   get lastEvent(): string {
     return this._lastEvent;
@@ -223,12 +235,19 @@ export class App {
     const ran = this.engine.steps() - before;
     if (this._lastStop === STOP.BUDGET || this._lastStop === STOP.VSYNC) {
       this.note(`Stepped ${ran} (${stateNameOf(this.engine.state())}, PC ${hex16(this.engine.cpu().pc)})`);
+    } else if (this._lastStop === STOP.WAIT_INPUT) {
+      // Parked at a CONIN: stepping cannot move the head, so say so instead of doing nothing.
+      this.note(
+        ran === 0
+          ? 'Waiting for input: type a command in the Console panel'
+          : `Stepped ${ran}, then the machine stopped for input`,
+      );
     }
   }
 
   /** Run until the next BIOS call has completed (or the machine stops). */
   stepOverSyscall(): void {
-    this.seenSyscall = this.engine.state() === STATE.SYSCALL;
+    this.syscallMark = this.engine.syscallsDone();
     this.setMode('over-syscall');
   }
 
@@ -610,14 +629,7 @@ export class App {
         break;
       case 'over-syscall':
         this.runUntil(
-          () => {
-            const s = engine.state();
-            if (s === STATE.SYSCALL) {
-              this.seenSyscall = true;
-              return false;
-            }
-            return this.seenSyscall;
-          },
+          () => engine.syscallsDone() > this.syscallMark,
           MAX_FRAME_MS,
           () => this.note(`Stepped over ${engine.syscallName(engine.lastSyscall())}`),
         );
@@ -688,6 +700,12 @@ export class App {
         return false;
       case STOP.WAIT_INPUT:
         this.hzAcc = 0;
+        // A targeted run (step over, run to halt, run to a state change) cannot reach its target
+        // while the machine is parked at a CONIN, so hand control back instead of spinning.
+        if (this._mode !== 'run' && this._mode !== 'paused') {
+          this.setMode('paused');
+          this.note('Waiting for input: type a command in the Console panel');
+        }
         return false;
       case STOP.VSYNC:
         return false;

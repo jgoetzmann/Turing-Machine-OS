@@ -146,6 +146,7 @@ export function createLeversPanel(root: HTMLElement, engine: Engine, bus: Bus): 
       input = i;
     }
     input.title = def.hint;
+    input.dataset.lever = String(def.id);
     const tag = el('span', def.machine ? 'tag machine' : 'tag', def.machine ? 'resets' : 'view');
     const c: Control = { def, input, handler: () => apply(c) };
     input.addEventListener('change', c.handler);
@@ -166,10 +167,11 @@ export function createLeversPanel(root: HTMLElement, engine: Engine, bus: Bus): 
     bus.emit('machine-reset');
   };
   const onBpClear = (): void => {
-    engine.bpClear();
+    // The app owns the breakpoint list (it reinstalls it after a reset), so ask rather than clear
+    // the engine behind its back.
     status.className = 'tos-ok';
     setText(status, 'breakpoints cleared');
-    bus.emit('breakpoints-changed');
+    bus.emit('breakpoints-clear-request');
   };
   resetBtn.addEventListener('click', onReset);
   bpClearBtn.addEventListener('click', onBpClear);

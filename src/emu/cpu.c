@@ -222,11 +222,18 @@ static void alu_add(cpu_t *cpu, uint8_t v, uint8_t carry_in) {
     set_cy_ac(cpu, sum > 0xFFu, ac);
 }
 
+/* The 8080 subtracts by adding the two's complement: A + ~v + !borrow. AC is the carry out of
+   bit 3 of that addition, so it is SET when there is no borrow from bit 4. */
+static int sub_ac(uint8_t a, uint8_t v, uint8_t borrow_in) {
+    return (int)(((uint16_t)(a & 0x0Fu) + (uint16_t)((uint8_t)~v & 0x0Fu) +
+                  (uint16_t)(borrow_in ? 0u : 1u)) > 0x0Fu);
+}
+
 static void alu_sub(cpu_t *cpu, uint8_t v, uint8_t borrow_in) {
     const uint16_t sub  = (uint16_t)v + (uint16_t)borrow_in;
     const uint16_t diff = (uint16_t)cpu->a - sub;
     const int cy = (uint16_t)cpu->a < sub;
-    const int ac = (cpu->a & 0x0Fu) < ((v & 0x0Fu) + borrow_in);
+    const int ac = sub_ac(cpu->a, v, borrow_in);
     cpu->a = (uint8_t)(diff & 0xFFu);
     set_szp(cpu, cpu->a);
     set_cy_ac(cpu, cy, ac);
@@ -236,13 +243,15 @@ static void alu_cmp(cpu_t *cpu, uint8_t v) {
     const uint8_t a = cpu->a;
     const uint8_t result = (uint8_t)(a - v);
     set_szp(cpu, result);
-    set_cy_ac(cpu, a < v, (a & 0x0Fu) < (v & 0x0Fu));
+    set_cy_ac(cpu, a < v, sub_ac(a, v, 0u));
 }
 
 static void alu_ana(cpu_t *cpu, uint8_t v) {
+    /* 8080 ANA/ANI: CY cleared, AC = OR of bit 3 of the two operands. (The 8085 always sets AC.) */
+    const int ac = ((cpu->a | v) & 0x08u) != 0u;
     cpu->a = (uint8_t)(cpu->a & v);
     set_szp(cpu, cpu->a);
-    set_cy_ac(cpu, 0, 1);            /* 8080 ANA/ANI: CY cleared, AC set */
+    set_cy_ac(cpu, 0, ac);
 }
 
 static void alu_xra(cpu_t *cpu, uint8_t v) {
@@ -271,8 +280,10 @@ static void alu_dcr(cpu_t *cpu, uint8_t code) {
     const uint8_t result = (uint8_t)(before - 1u);
     write_reg(cpu, code, result);
     set_szp(cpu, result);
+    /* DCR is r + 0FFH on the 8080: the carry out of bit 3 appears whenever the low nibble was
+       not already zero, so AC is the complement of the half-borrow. */
     cpu->flags &= (uint8_t)~FLAG_AC;
-    if ((before & 0x0Fu) == 0x00u) cpu->flags |= FLAG_AC;
+    if ((before & 0x0Fu) != 0x00u) cpu->flags |= FLAG_AC;
 }
 
 static void alu_dad(cpu_t *cpu, uint8_t rp) {
@@ -360,13 +371,9 @@ void cpu_step(cpu_t *cpu) {
         switch (op) {
             /* ---- 0x00..0x3F ---- */
             case 0x00u: case 0x08u: case 0x10u: case 0x18u:
-            case 0x28u: case 0x38u:                              /* NOP, NOP* */
-                break;
-            case 0x20u:                                          /* RIM */
-                cpu->a = cpu->rim_value;
-                break;
-            case 0x30u:                                          /* SIM */
-                cpu->sim_value = cpu->a;
+            case 0x20u: case 0x28u: case 0x30u: case 0x38u:      /* NOP, NOP* */
+                /* 20H and 30H are RIM and SIM on the 8085. This is an 8080: they are NOPs, and
+                   rim_value / sim_value are storage the assembler's mnemonics never reach. */
                 break;
 
             case 0x01u: case 0x11u: case 0x21u: case 0x31u:      /* LXI rp,d16 */

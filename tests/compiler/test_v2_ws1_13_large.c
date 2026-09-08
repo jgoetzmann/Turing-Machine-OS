@@ -85,14 +85,14 @@ static void gen_pad_variant(int n)
     pos = app(pos, PRINT_INT);
     pos = app(pos, "int pad() {\n");
     for (i = 0; i < n; i++) { pos = app(pos, "g = g + 1;"); if ((i % 16) == 15) pos = app(pos, "\n"); }
-    sprintf(buf,
+    snprintf(buf, sizeof buf,
         "\n  if (g == %d && g > 0) putchar('Y'); else putchar('N');\n"
         "  if (g == 0 || g == %d) putchar('Y'); else putchar('N');\n"
         "  if (g == 0 && g == %d) putchar('N'); else putchar('Y');\n"
         "  if (g == 1 || g == 2) putchar('N'); else putchar('Y');\n"
         "  return g;\n}\n", n, n, n);
     pos = app(pos, buf);
-    sprintf(buf,
+    snprintf(buf, sizeof buf,
         "int main() {\n"
         "  int r;\n"
         "  g = 0;\n"
@@ -118,7 +118,7 @@ static void gen_main_variant(int n)
     pos = app(pos, PRINT_INT);
     pos = app(pos, "int main() {\n  int i; int c;\n  g = 0;\n");
     for (i = 0; i < n; i++) { pos = app(pos, "g = g + 1;"); if ((i % 16) == 15) pos = app(pos, "\n"); }
-    sprintf(buf,
+    snprintf(buf, sizeof buf,
         "\n  i = 0; c = 0;\n"
         "  while (i < 10 && (i %% 3 != 0 || i == 0)) { c = c + 1; i = i + 1; }\n"
         "  print_int(c); putchar('\\n');\n"
@@ -157,7 +157,7 @@ static int t_large_program_pad_variant(void)
     ASSERT(len <= (int)TOS_TPA_SIZE);
     ASSERT(run_prog(NULL, g_com, (uint32_t)len) == 0);
     ASSERT(g_steps > (uint32_t)n);
-    sprintf(expect, "YYYYYYYY\n%d\n", n);
+    snprintf(expect, sizeof expect, "YYYYYYYY\n%d\n", n);
     ASSERT(out_is(expect));
     ASSERT(tos_halt_reason() == TOS_HALT_NONE);
     ASSERT(tos_state() != KS_HALT);

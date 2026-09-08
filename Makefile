@@ -27,7 +27,7 @@ TOOLS := $(BUILD)/mkdisk $(BUILD)/cc_driver $(BUILD)/asm $(BUILD)/tmc $(BUILD)/b
 
 DEMO_FILES := $(sort $(shell find demos -type f ! -name 'README.md' ! -name 'tour.json' ! -name '*.expected' ! -name '*.py' 2>/dev/null))
 
-.PHONY: all tools shell gen disk demo-disk test wasm web test-web run bench asm tm bf disasm clean help
+.PHONY: all tools shell gen disk demo-disk test wasm web test-web test-e2e run bench asm tm bf disasm clean help
 
 ## all: build the native binary (build/turingos) and all host tools
 all: $(TARGET) tools
@@ -134,6 +134,10 @@ web: wasm gen demo-disk
 ## test-web: regenerate web content and run the Node tests under web/test against the wasm build (needs `npm ci` in web/ once)
 test-web: wasm gen demo-disk
 	cd web && npm run content && node --test test/*.test.mjs
+
+## test-e2e: build the site and drive it in a headless browser with Cypress (needs `npm ci` in web/)
+test-e2e: wasm gen demo-disk
+	cd web && npm run build && npm run e2e
 
 ## run: run the OS interactively in this terminal
 run: all shell disk

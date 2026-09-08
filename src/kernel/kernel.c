@@ -101,7 +101,12 @@ static void k_load_shell(void)
 /* Put the CPU at the start of the shell: PC = 0x0100, SP = sp_init, tape 0 selected. */
 static void k_enter_shell_cpu(kernel_t *k)
 {
+    /* The cycle odometer counts the machine's lifetime, not one program's: a program returning to
+       the shell must not rewind it, or the --hz throttle loses its reference point. */
+    const uint64_t cycles = k->cpu.cycles;
+
     cpu_reset(&k->cpu);
+    k->cpu.cycles = cycles;
     k->cpu.pc = (uint16_t)TOS_TPA_BASE;
     k->cpu.sp = k->sp_init;
     k->cpu.halted = 0;
@@ -156,6 +161,15 @@ static int k_bp_pc(kernel_t *k, uint16_t pc)
 
 /* After the instruction stamped `stamp`: did it read/write an address inside a READ/WRITE range?
  * Uses the mem age arrays (the stamp of the last access to every cell on every tape). */
+/* The step number kernel.c last stamped into the memory ages; mem.h has no getter for it. */
+static uint32_t g_step_stamp = 0u;
+
+static void k_set_step(uint32_t stamp)
+{
+    g_step_stamp = stamp;
+    mem_set_step(stamp);
+}
+
 static int k_bp_access(const kernel_t *k, uint32_t stamp)
 {
     uint8_t tapes = mem_tape_count();
@@ -183,6 +197,18 @@ static int k_bp_access(const kernel_t *k, uint32_t stamp)
         }
     }
     return -1;
+}
+
+/* Watchpoints for the tape accesses a BIOS call made itself (sector DMA, program loading).
+ * They carry the step stamp kernel_step set on entry, the same one the instruction arm uses. */
+static int k_bp_syscall_access(kernel_t *k)
+{
+    int hit = k_bp_access(k, g_step_stamp);
+
+    if (hit >= 0) {
+        k->bp_hit = hit;
+    }
+    return hit;
 }
 
 /* Perform transition `idx`: assign state, count it, trace it. Returns 1 when a KBP_STATE
@@ -265,7 +291,8 @@ static int k_after_dispatch(kernel_t *k, int r, int *bp)
         k->frame++;
         bios_tick();
         hal_display(mem_raw() + TOS_DISPLAY_BASE(L));
-        hal_vsync();
+        /* Frame pacing is the host loop's job: kernel_step returns KSTOP_VSYNC and never sleeps
+           (CLAUDE.md, SPEC WS4-03). See the KSTOP_VSYNC arm in src/main.c and kernel_run below. */
         if (k_transit(k, k->resume_state == KS_RUNNING ? 3 : 2)) {
             *bp = 1;
         }
@@ -366,7 +393,7 @@ void kernel_init(kernel_t *k, const kernel_config_t *cfg)
     cpu_init(&k->cpu);
     k_load_shell();
     k_enter_shell_cpu(k);
-    mem_set_step(1u);
+    k_set_step(1u);
     k_refresh_ports(k);
 
     k->state = KS_BOOT;
@@ -405,7 +432,7 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
     g_dirty_since = (uint32_t)k->steps + 1u;
     g_hal_keys = hal_keys();
     k->bp_hit = -1;
-    mem_set_step((uint32_t)k->steps + 1u);
+    k_set_step((uint32_t)k->steps + 1u);
 
     for (;;) {
         int r;
@@ -448,6 +475,9 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
                 bp = 1;
             }
             st = k_after_dispatch(k, r, &bp);
+            if (k_bp_syscall_access(k) >= 0) {
+                bp = 1;
+            }
             k_drain_output();
             if (st >= 0) {
                 stop = bp ? KSTOP_BREAKPOINT : (kernel_stop_t)st;
@@ -471,6 +501,9 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
                 break;
             }
             st = k_after_dispatch(k, r, &bp);
+            if (k_bp_syscall_access(k) >= 0) {
+                bp = 1;
+            }
             k_drain_output();
             if (st >= 0) {
                 stop = bp ? KSTOP_BREAKPOINT : (kernel_stop_t)st;
@@ -504,7 +537,7 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
 
             k_refresh_ports(k);
             stamp = (uint32_t)k->steps + 1u;
-            mem_set_step(stamp);
+            k_set_step(stamp);
             if (trace_enabled()) {
                 uint8_t op = ((uint32_t)pc < L) ? mem_peek(k_tape_for(pc), pc) : 0xFFu;
                 trace_push(stamp, pc, (uint8_t)TR_FETCH, op);

@@ -11,10 +11,13 @@
     "content": "node scripts/build-content.mjs",
     "build": "npm run content && tsc --noEmit && vite build",
     "dev": "npm run content && vite",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "e2e": "node scripts/e2e.mjs",
+    "e2e:dev": "node scripts/e2e.mjs --dev"
   },
   "devDependencies": {
     "@types/node": "26.5.0",
+    "cypress": "15.21.1",
     "marked": "18.0.11",
     "typescript": "7.0.2",
     "vite": "8.2.2"

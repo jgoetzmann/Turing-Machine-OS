@@ -180,7 +180,11 @@ int sh_diskcmd(void) {
     if (!sh_atend()) {
         return sh_bad();
     }
-    seldisk(d);
+    /* SELDISK fails when that disk is not mounted; keeping the prompt honest matters more than
+       pretending the switch worked. */
+    if (seldisk(d) != 0) {
+        return sh_bad();
+    }
     sh_disk = d;
     return 0;
 }

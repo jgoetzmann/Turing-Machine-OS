@@ -35,7 +35,7 @@ void kernel_set_con_out(void (*fn)(uint8_t ch));
 
 #define API_LOG_CAP    4096u
 #define API_OUT_CAP    65536u
-#define API_LOAD_SLOTS 4u
+#define API_LOAD_SLOTS 8u
 #define API_KIND_CON   0u
 #define API_KIND_KEYS  1u
 #define API_KIND_LOAD  2u
@@ -57,6 +57,8 @@ static uint32_t     g_log_len;
 static uint32_t     g_replay_pos;             /* first log entry not yet (re)applied; == g_log_len when none pending */
 static uint32_t     g_pushed_total;           /* console bytes pushed into the HAL since create/reset */
 static int          g_replaying;              /* 1 while tos_seek re-runs the machine (host output suppressed) */
+static uint32_t     g_replay_seen_upto;       /* during a replay, the last step whose output the host already saw */
+static int          g_seek_restoring;         /* 1 while a failed seek is putting the machine back */
 
 static uint8_t      g_out[API_OUT_CAP];       /* console output ring */
 static uint32_t     g_out_head;               /* total bytes written */
@@ -64,7 +66,9 @@ static uint32_t     g_out_tail;               /* total bytes read */
 
 static uint8_t      g_load_img[API_LOAD_SLOTS][TOS_TPA_SIZE];
 static uint32_t     g_load_len[API_LOAD_SLOTS];
+static uint32_t     g_load_serial[API_LOAD_SLOTS];   /* which load each slot currently holds */
 static uint32_t     g_load_next;
+static int          g_replay_broken;                 /* a replayed load referred to a recycled slot */
 
 static const char *const k_state_names[6] = { "BOOT", "IDLE", "SHELL", "RUNNING", "SYSCALL", "HALT" };
 
@@ -72,7 +76,7 @@ static const char *const k_state_names[6] = { "BOOT", "IDLE", "SHELL", "RUNNING"
 
 static void api_con_out(uint8_t ch)
 {
-    if (g_replaying) {
+    if (g_replaying && (uint32_t)g_k.steps <= g_replay_seen_upto) {
         return;                     /* the host already saw this output the first time round */
     }
     hal_con_out(ch);
@@ -106,7 +110,9 @@ static void api_clear_host_state(void)
     g_out_tail = 0u;
     g_replaying = 0;
     memset(g_load_len, 0, sizeof(g_load_len));
+    memset(g_load_serial, 0, sizeof(g_load_serial));
     g_load_next = 0u;
+    g_replay_broken = 0;
 }
 
 static int api_config_valid(const kernel_config_t *c)
@@ -164,7 +170,12 @@ static void api_apply(api_input_t *e)
         hal_keys_set(e->value);
     } else if (e->kind == (uint8_t)API_KIND_LOAD) {
         uint32_t slot = e->value % API_LOAD_SLOTS;
-        if (g_load_len[slot] != 0u) {
+        uint32_t tag = (uint32_t)e->pad0 | ((uint32_t)e->pad1 << 8);
+        if (g_load_len[slot] == 0u || (g_load_serial[slot] & 0xFFFFu) != tag) {
+            /* Only the last API_LOAD_SLOTS images are kept. This entry names one that has been
+             * overwritten, so replaying it would load a different program: refuse instead. */
+            g_replay_broken = 1;
+        } else {
             kernel_load_com(&g_k, g_load_img[slot], g_load_len[slot]);
         }
     }
@@ -172,7 +183,7 @@ static void api_apply(api_input_t *e)
 
 /* Record a fresh host input: a pending future (from an earlier seek) is discarded first, since the
  * timeline has just branched. Applies it immediately. */
-static void api_record(uint8_t kind, uint8_t value)
+static void api_record_tagged(uint8_t kind, uint8_t value, uint16_t tag)
 {
     api_input_t *e;
     api_input_t tmp;
@@ -184,19 +195,24 @@ static void api_record(uint8_t kind, uint8_t value)
         /* Log full: the input still reaches the machine, it just cannot be replayed. */
         tmp.kind = kind;
         tmp.value = value;
-        tmp.pad0 = 0u;
-        tmp.pad1 = 0u;
+        tmp.pad0 = (uint8_t)(tag & 0xFFu);
+        tmp.pad1 = (uint8_t)((tag >> 8) & 0xFFu);
         api_apply(&tmp);
         return;
     }
     e = &g_log[g_log_len];
     e->kind = kind;
     e->value = value;
-    e->pad0 = 0u;
-    e->pad1 = 0u;
+    e->pad0 = (uint8_t)(tag & 0xFFu);
+    e->pad1 = (uint8_t)((tag >> 8) & 0xFFu);
     api_apply(e);
     g_log_len++;
     g_replay_pos = g_log_len;
+}
+
+static void api_record(uint8_t kind, uint8_t value)
+{
+    api_record_tagged(kind, value, 0u);
 }
 
 /* Re-apply every pending entry recorded at or before the current step. */
@@ -659,12 +675,15 @@ TOS_EXPORT int tos_seek(uint32_t step)
     uint32_t snap_tick;
     uint32_t i;
     uint32_t stall = 0u;
+    uint32_t from_step;
+    int trace_was_on;
 
     api_ensure();
     slot = snapshot_find(step);
     if (slot < 0) {
         return -1;
     }
+    from_step = (uint32_t)g_k.steps;
     snap_step = snapshot_step(slot);
 
     /* Unconsumed bytes we pushed would be fed twice once the log is replayed: pull them out. */
@@ -688,7 +707,14 @@ TOS_EXPORT int tos_seek(uint32_t step)
     }
     g_replay_pos = i;
 
+    /* The trace already holds these steps; re-running them must not write them a second time. */
+    trace_was_on = trace_enabled();
+    if (trace_was_on) {
+        trace_enable(0);
+    }
     g_replaying = 1;
+    g_replay_broken = 0;
+    g_replay_seen_upto = from_step;
     while ((uint32_t)g_k.steps < step && g_k.state != KS_HALT) {
         uint32_t before = (uint32_t)g_k.steps;
         uint32_t n = 0u;
@@ -711,8 +737,22 @@ TOS_EXPORT int tos_seek(uint32_t step)
         }
     }
     g_replaying = 0;
+    if (trace_was_on) {
+        trace_enable(1);
+    }
     kernel_write_meta(&g_k);
-    return ((uint32_t)g_k.steps == step) ? 0 : -1;
+    if ((uint32_t)g_k.steps == step && !g_replay_broken) {
+        return 0;
+    }
+    /* The target could not be reached (the log has no input the machine is waiting for, or it
+     * halted first). Put the machine back where the caller had it instead of leaving it stranded
+     * at some intermediate step. */
+    if (!g_seek_restoring && (uint32_t)g_k.steps != from_step) {
+        g_seek_restoring = 1;
+        (void)tos_seek(from_step);
+        g_seek_restoring = 0;
+    }
+    return -1;
 }
 
 TOS_EXPORT int tos_snapshot_count(void)
@@ -735,10 +775,11 @@ TOS_EXPORT int tos_load_com(const uint8_t *bytes, uint32_t len)
         return -1;
     }
     slot = g_load_next % API_LOAD_SLOTS;
+    g_load_serial[slot] = g_load_next;
     g_load_next++;
     memcpy(g_load_img[slot], bytes, len);
     g_load_len[slot] = len;
-    api_record((uint8_t)API_KIND_LOAD, (uint8_t)slot);
+    api_record_tagged((uint8_t)API_KIND_LOAD, (uint8_t)slot, (uint16_t)(g_load_serial[slot] & 0xFFFFu));
     /* Anchor the freshly loaded state so a seek right after the load never has to replay the
      * whole shell session that came before it. */
     g_k.last_snapshot_step = (uint32_t)g_k.steps;

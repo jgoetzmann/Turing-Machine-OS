@@ -1,6 +1,6 @@
 # 8080 Assembler
 
-`asm_assemble` (`src/lang/asm.c`) turns 8080 assembly source into a flat `.com` image. It is a host tool — a ROM service like the C compiler — reachable as `asm F` in the shell (BIOS 0x1A, `F.ASM` → `F.COM`), as `build/asm <in.asm> <out.com>` on the host, as `tos_compile(TOS_LANG_ASM, …)` and from the playground editor. `build/disasm` is its inverse, and `disasm` output re-assembles to identical bytes.
+`asm_assemble` (`src/lang/asm.c`) turns 8080 assembly source into a flat `.com` image. It is a host tool — a ROM service like the C compiler — reachable as `asm F` in the shell (BIOS 0x1A, `F.ASM` → `F.COM`), as `build/asm <in.asm> <out.com>` on the host, as `tos_compile(TOS_LANG_ASM, …)` and from the playground editor. `build/disasm` is its inverse, and `disasm` output re-assembles to identical bytes for all 256 opcodes.
 
 ## Source format
 
@@ -49,7 +49,9 @@ All of the 8080:
 - Decimal `123`; hex `0FFH`, `0xFF`, `$FF`; binary `1010B`; character `'A'`.
 - `$` is the current address.
 - Operators `+ - * /`, evaluated left to right, with `( )` for grouping.
-- Labels and `EQU` symbols may be used before they are defined — the assembler makes two passes.
+- Labels and `EQU` symbols may be used before they are defined: the assembler makes two passes. The operands of
+  `ORG`, `DS` and `EQU` are the exception, because pass 1 has to know the location counter as it goes; a symbol
+  used there must already be defined, or the assembler reports `undefined symbol`.
 
 ## Output and errors
 
@@ -61,7 +63,7 @@ Errors stop assembly and report the first problem:
 |---|---|
 | `line N: unknown mnemonic 'X'` | `FOO A,B` |
 | `line N: undefined symbol 'X'` | `JMP nowhere` |
-| `line N: bad operand` | `MOV A` or `MVI M,H` |
+| `line N: bad operand` | `MOV A` (`MVI M,H` reports `undefined symbol 'H'`: the second operand of `MVI` is a number) |
 | `line N: value out of range` | `MVI A,300` or `RST 9` |
 
 The `build/asm` CLI prints the error to stderr and exits 1; the shell prints it to the console and writes no `.COM`.
@@ -100,4 +102,9 @@ msg:    DB 'HELLO FROM ASM',0AH,0
 0104: B7        ORA A
 ```
 
-Format rules (`src/emu/disasm.c`): upper-case mnemonic, one space, operands separated by `,` with no spaces, 8-bit immediates as two hex digits + `H`, 16-bit as four + `H`. The undocumented aliases (`0x08 0x10 0x18 0x20 0x28 0x30 0x38` = NOP, `0xCB` = JMP, `0xD9` = RET, `0xDD 0xED 0xFD` = CALL) are shown with a trailing `*`: `NOP*`, `JMP* 0123H`, `RET*`, `CALL* 0123H`. The visualizer's detail panel uses the same routine, so what you see on screen is what `build/asm` would accept back.
+Format rules (`src/emu/disasm.c`): upper-case mnemonic, one space, operands separated by `,` with no spaces, 8-bit immediates as two hex digits + `H`, 16-bit as four + `H`. The undocumented aliases (`0x08 0x10 0x18 0x20 0x28 0x30 0x38` = NOP, `0xCB` = JMP, `0xD9` = RET, `0xDD 0xED 0xFD`
+= CALL) are shown with a trailing `*`. Where one alias covers several bytes, the byte is part of the spelling, so
+nothing is lost on the way back: `NOP*`, `NOP*10`, `NOP*18`, `NOP*20`, `NOP*28`, `NOP*30`, `NOP*38`, `JMP* 0123H`,
+`RET*`, `CALL* 0123H`, `CALL*ED 0123H`, `CALL*FD 0123H`. The assembler accepts every one of those spellings.
+`20H` and `30H` are the 8085's RIM and SIM; those two mnemonics still assemble, and this 8080 runs both bytes as
+a NOP. The visualizer's detail panel uses the same routine, so what you see on screen is what `build/asm` would accept back.

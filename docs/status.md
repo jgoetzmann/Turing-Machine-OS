@@ -29,9 +29,12 @@ The compilers are ROM services by design (`decisions.md` A7, `languages.md`); a 
 ## Tests
 
 - `make test` builds everything and runs `tests/run_tests.sh`: every `tests/**/test_*.c` compiled standalone against `build/libtos.a`, plus every `tests/**/*.sh`. It prints `PASS: <name>` per test and `N/N passed` at the end, and exits non-zero on any failure.
-- **Counts.** `make test` runs 76 tests (the 29 v1 tests, ported to the v2 interfaces, plus 47 v2 C and shell tests); `make test-web` runs 54 Node tests over the wasm. The v2 spec lists 59 behavior ids (`WSn-mm`); every one is cited by at least one test. The in-browser behaviors (WS3-02 … WS3-06: run/pause/step controls, breakpoints, time travel, keyboard shortcuts, the URL state, the editor) were exercised in headless Chrome over the DevTools protocol before release, in addition to the Node tests of their pure helpers.
+- **Counts.** `make test` runs 81 tests (42 C files and 39 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 55 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
 - `make test-web` runs `web/test/*.test.mjs` with `node --test` against the real wasm: boot, a shell session (`dir`, `cc`, `run`, `halt`), every demo's `.expected` output, and `layout.json` against the wasm's actual struct offsets.
-- CI (`.github/workflows/ci.yml`) runs `make test` on ubuntu and macos and once more with `-fsanitize=address,undefined`. `pages.yml` builds the wasm and the site and deploys on push to `main`.
+- `make test-e2e` builds the site and drives it with Cypress: the thirteen panels mount and draw, the toolbar
+  runs, steps, resets and reports, breakpoints fire, time travel seeks, the levers rebuild the machine without
+  losing the disk, every demo loads and runs, and the editor compiles, saves and reports errors on the right line.
+- CI (`.github/workflows/ci.yml`) runs `make test` on ubuntu and macos and once more with `-fsanitize=address,undefined`, then the wasm build, the Node tests, the site build and the Cypress suite. `pages.yml` builds the wasm and the site and deploys on push to `main`.
 
 Coverage by area (behavior ids from the spec):
 
@@ -43,7 +46,7 @@ Coverage by area (behavior ids from the spec):
 | Compiler | 16-bit arithmetic (WS5-01), arrays (WS5-02), operators and control flow (WS5-03), intrinsics (WS5-04), diagnostics (WS5-08), the 8 KB no-scratch case (WS1-13) |
 | Languages | assembler encodings and errors (WS7-01), TM errors (WS7-02), BF errors (WS7-03), Busy Beavers and increment vs `tm_ref.py` (WS6-04), palindrome travel ratio (WS6-05), asm round-trip (WS6-07), BF on tape 1 (WS6-08) |
 | Demos | `hello/*` outputs with no `puts` shortcuts (WS1-12, WS2-04, WS5-10), Pong frames and size (WS6-02), Life golden frame (WS6-03), fault at 32K (WS6-09), Forth (WS7-04), shell self-compile (WS6-06), the demo shell session under Node (WS2-05) |
-| Web | panel modules exist (WS3-01), URL state / disasm view / speed helpers (WS3-02…06), content slugs (WS8-02), Pages workflow (WS8-01) |
+| Web | panel modules exist (WS3-01), URL state, disassembly view and speed helpers under `node --test` (WS3-02…06), the panels and controls themselves under Cypress, content slugs (WS8-02), Pages workflow (WS8-01) |
 | Docs / repo | constants block matches `dump_constants` (WS0-02), `CLAUDE.md` (WS0-05), README (WS0-06), CI (WS0-09), no second visualizer (WS9-01) |
 
 ## Known limits
@@ -55,14 +58,15 @@ Coverage by area (behavior ids from the spec):
 | Banked window | 8 KB / 24 KB / 40 KB per tape | see the memory map |
 | Files | 8.3 names, 64 directory entries, 16 open handles, 2 disks of 512,512 bytes | CP/M-style flat filesystem |
 | Console | 128-byte line buffer, 4,096-byte output ring | static buffers, no heap |
-| Trace / snapshots / input log | 65,536 events, 32 slots, 4,096 entries | fixed rings; `tos_seek` fails beyond the oldest slot |
-| Clock | `hz` throttles native `kernel_run` only; the browser uses a per-frame step budget | `kernel_step` never sleeps |
+| `RAND` | 17 distinct values per seed | the shift triple is fixed in the frozen `bios.h`; `levers.md` |
+| Trace / snapshots / input log | 65,536 events, 32 slots (the first keeps the boot anchor), 4,096 entries | fixed rings; `tos_seek` fails beyond the oldest slot, and refuses when a program image it would have to reload has been recycled (8 kept) |
+| Clock | `hz` throttles the native run loop only; the browser uses the speed control's per-frame step budget | `kernel_step` never sleeps: the host loop paces |
 | Keys (native) | `w s ↑ ↓ space esc enter`, each held for 150 ms | a TTY has no key-up events |
 | Browser | main thread only, ≤ 8 ms of machine per frame at `max` speed | GitHub Pages cannot send COOP/COEP headers, so no `SharedArrayBuffer` |
 | tiny-C | no pointers, structs, `switch`, `?:`, `sizeof`, floats, local arrays; ≤ 4 params, ≤ 32 locals, ≤ 256 globals, ≤ 64 functions | `tiny-c.md`, `decisions.md` B16 |
-| CPU | 8080 only — no Z80 opcodes, no CP/M BDOS (`CALL 5`), interrupts limited to EI/DI/RIM/SIM flag storage | `decisions.md` A2, A5 |
-| Speed of tiny-C code | Life costs ~444,000 instructions per generation (≈0.6 gen/s at a virtual 2 MHz; dozens per second unthrottled); Pong ≤ 3,700 per frame | 16-bit `HL` arithmetic everywhere, `decisions.md` B21 |
-| Native throughput | ~39 M instructions/s (`make bench`, Apple M-series, `-O2`); the wasm build is 117 KB | — |
+| CPU | 8080 only: no Z80 opcodes, no CP/M BDOS (`CALL 5`), interrupts limited to EI/DI flag storage, and 20H/30H are NOPs rather than the 8085's RIM/SIM | `decisions.md` A2, A5, B24 |
+| Speed of tiny-C code | Life costs ~290,000 instructions per generation (3.0 M cycles, so about two thirds of a generation per second at a virtual 2 MHz, dozens per second unthrottled); Pong ≤ 3,700 per frame | 16-bit `HL` arithmetic everywhere, `decisions.md` B21 |
+| Native throughput | ~39 M instructions/s, ~35 M with the trace on (`make bench`, Apple M-series, `-O2`); the wasm build is 120 KB | — |
 
 ## Removed in v2
 

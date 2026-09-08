@@ -8,6 +8,7 @@ natively and to WebAssembly; the site under `web/` runs the real machine.
 
 - `make test` — build everything, run every C and shell test. Run it before calling anything done.
 - `make test-web` — Node tests over the wasm build (needs Emscripten 6.0.9 and Node >= 22).
+- `make test-e2e` — Cypress drives the built site in a headless browser (needs `npm ci` in `web/`).
 - `make web` — wasm + demo disk + generated JSON + `npm ci && npm run build` in `web/`.
 - `make run` — boot the OS in this terminal. `make help` lists every target.
 - Single test: `cc -std=c99 -Wall -Wextra -Werror -pedantic -I./src tests/<area>/test_x.c build/libtos.a -o build/tests/x && build/tests/x`.
@@ -50,7 +51,8 @@ Docs: `docs/architecture.md` (what is), `docs/decisions.md` (why), `docs/levers.
   `RUN_ALL_TESTS()`, print `PASS: <stem>` and return 0. Linked against `build/libtos.a`.
 - Shell tests: POSIX `sh` under `tests/**/*.sh`, run from the repo root, print `PASS: <name>`.
   Step-bounded: use `--stdin-script=` or piped input ending in `halt`, never timeouts.
-- Web tests: `web/test/*.test.mjs` with `node --test` against `web/public/turingos.js`.
+- Web tests: `web/test/*.test.mjs` with `node --test` against `web/public/turingos.js`; browser tests:
+  `web/cypress/e2e/*.cy.js`, one file per area, asserting what the user sees.
 - Every behavior id (`WSn-mm`) in the spec has at least one test that cites it.
 - The constants table in `docs/architecture.md` is `build/dump_constants --markdown` output; a test
   compares them. Change `src/tos.h`, then regenerate — never hand-edit the table.

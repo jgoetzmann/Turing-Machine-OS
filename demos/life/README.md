@@ -14,8 +14,9 @@ What to watch:
   `generation()` reads eight neighbours per cell from the first and writes
   the second, then copies it back: a read wave followed by a write wave.
 - `render()` packs eight cells into each framebuffer byte, MSB first.
-- A generation is roughly half a million 8080 instructions: a frame every
-  quarter second at `hz=2000000`, as fast as the host allows at `max`.
+- A generation is about 290,000 8080 instructions and 3.0 M cycles: roughly one
+  and a half seconds per frame at `hz=2000000`, and as fast as the host allows
+  at `max`.
 
 `gen100.expected` is the framebuffer after the 100th vsync, as 512 lowercase
 hex characters (`gen100.py` regenerates it). Tests compare the display

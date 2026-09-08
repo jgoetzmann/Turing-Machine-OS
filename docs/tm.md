@@ -25,7 +25,11 @@ q0 (0,_) -> (0,0) (R,R) q1        # k-tape rule
 
 TM tape j (0-based) is placed on machine tape `j mod k` at bank offset `(j div k) × 8192`, where k is the machine's tape count (read at run time with `IN 04H`). The head starts at offset `+4096` of that region, so it can move 4,096 cells left before hitting the edge. There is no pre-fill: the window is zero at boot and zero reads as blank.
 
-On a 1-tape machine a 2-tape TM stacks its tapes at `0x4000` and `0x6000`; on a 2-tape machine each TM tape gets its own machine tape at `0x4000`, and the strip view can follow either head. If a TM needs more room than the window has — `(j div k) × 8192 + 8192 > window size` — compilation fails with `too many tapes` (a 32K machine has an 8 KB window, so it holds exactly k TM tapes).
+On a 1-tape machine a 2-tape TM stacks its tapes at `0x4000` and `0x6000`; on a 2-tape machine each TM tape gets
+its own machine tape at `0x4000`, and the strip view can follow either head. Whether the tapes fit depends on the
+machine the program is run on, which the compiler cannot know, so the check is compiled into the program: if
+`(j div k) × 8192 + 8192 > window size` it prints `line N: too many tapes` and halts at run time (a 32K machine
+has an 8 KB window, so it holds exactly k TM tapes).
 
 ## Output
 
@@ -38,7 +42,7 @@ A program may also print before the dump — the palindrome demos print `yes` or
 | Error | Cause |
 |---|---|
 | `line N: bad rule` | Wrong field count, an unknown move (`X`), a tuple of the wrong arity, a malformed directive |
-| `line N: too many tapes` | `tapes:` above 4, or more TM tapes than fit in the window |
+| `line N: too many tapes` | `tapes:` above 4 stops the compiler; more TM tapes than the running machine's window holds prints the same line from the compiled program and halts |
 | `line N: duplicate rule` | Two rules for the same (state, symbols) |
 
 ## Example: BB(2)

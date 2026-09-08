@@ -46,11 +46,14 @@ static int t_ws1_08_spec_examples(void)
 
 static int t_ws1_08_nop_alias_star(void)
 {
+    /* Each alias byte spells itself, so a listing assembles back to the same bytes. */
     EXPECT3(0x08, 0x11, 0x22, "NOP*", 1);
-    EXPECT3(0x10, 0x11, 0x22, "NOP*", 1);
-    EXPECT3(0x18, 0x11, 0x22, "NOP*", 1);
-    EXPECT3(0x28, 0x11, 0x22, "NOP*", 1);
-    EXPECT3(0x38, 0x11, 0x22, "NOP*", 1);
+    EXPECT3(0x10, 0x11, 0x22, "NOP*10", 1);
+    EXPECT3(0x18, 0x11, 0x22, "NOP*18", 1);
+    EXPECT3(0x20, 0x11, 0x22, "NOP*20", 1);   /* 8085 RIM; a NOP here, like the executor */
+    EXPECT3(0x28, 0x11, 0x22, "NOP*28", 1);
+    EXPECT3(0x30, 0x11, 0x22, "NOP*30", 1);   /* 8085 SIM */
+    EXPECT3(0x38, 0x11, 0x22, "NOP*38", 1);
     return 0;
 }
 
@@ -73,8 +76,8 @@ static int t_ws1_08_ret_alias_star(void)
 static int t_ws1_08_call_alias_star(void)
 {
     EXPECT3(0xDD, 0x23, 0x01, "CALL* 0123H", 3);
-    EXPECT3(0xED, 0x23, 0x01, "CALL* 0123H", 3);
-    EXPECT3(0xFD, 0x23, 0x01, "CALL* 0123H", 3);
+    EXPECT3(0xED, 0x23, 0x01, "CALL*ED 0123H", 3);
+    EXPECT3(0xFD, 0x23, 0x01, "CALL*FD 0123H", 3);
     EXPECT3(0xCD, 0x23, 0x01, "CALL 0123H", 3);
     return 0;
 }

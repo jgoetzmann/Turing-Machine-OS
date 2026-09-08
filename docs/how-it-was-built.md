@@ -25,7 +25,20 @@ The repository you are reading is the result of that run plus the ordinary human
 
 ### By the numbers
 
-The v2 run, 2026-09-07: 14 builder slices and 5 spec-testers launched at once; ~22,000 lines written blind. First contact: every C file in `src/` compiled against the frozen headers with one comment nit as the only error, and the new compiler compiled the new shell on its first try (2,614 bytes, down from 5,115). First run of the suite: 40 of 57 tests passed; the 17 failures were legacy tests asserting v1 behaviour the spec had changed (DMA default, help text, exit line, 8-bit return values), two test bugs, and three real defects (an 8-bit input limit in the TM compiler, an unpinned "label state" rule, Brainfuck inheriting a previous program's cells). Final: 77 native tests and 54 web tests green, every one of the 59 behavior ids cited by a test, ~37 M instructions/s natively, a 117 KB wasm. Four independent auditors then re-checked all 99 roadmap items read-only: 42 done outright, 56 with a stated sub-clause unmet, 1 not done; the fixes that were cheap were made the same day and the rest are written next to the items in `v2-roadmap.md`. Three of the twelve subagent runs died mid-flight to API limits and were redone by hand — the spec made that possible.
+The v2 run, 2026-09-07: 14 builder slices and 5 spec-testers launched at once; ~22,000 lines written blind. First contact: every C file in `src/` compiled against the frozen headers with one comment nit as the only error, and the new compiler compiled the new shell on its first try (2,614 bytes, down from 5,115). First run of the suite: 40 of 57 tests passed; the 17 failures were legacy tests asserting v1 behaviour the spec had changed (DMA default, help text, exit line, 8-bit return values), two test bugs, and three real defects (an 8-bit input limit in the TM compiler, an unpinned "label state" rule, Brainfuck inheriting a previous program's cells). Final: 77 native tests and 54 web tests green, every one of the 60 behavior ids cited by a test, ~39 M instructions/s natively, a 117 KB wasm. Four independent auditors then re-checked all 99 roadmap items read-only: 42 done outright, 56 with a stated sub-clause unmet, 1 not done; the fixes that were cheap were made the same day and the rest are written next to the items in `v2-roadmap.md`. Three of the twelve subagent runs died mid-flight to API limits and were redone by hand — the spec made that possible.
+
+### The audit that followed, 2026-09-07
+
+Ten read-only auditors then went subsystem by subsystem looking for behaviour that contradicted the 8080, the
+spec or the documentation, and every finding was handed to a second agent whose job was to refute it by
+reproduction. Of 77 findings, 13 did not survive that and 64 did. The ones that mattered most were in code that
+had tests: the auxiliary carry was inverted on every subtraction, `tos_seek` could rebuild a machine out of the
+wrong program image, the compiler crashed on deeply nested expressions, a deleted file never reached the disk,
+and "Step over syscall" in the browser could never finish, because the state it waited for is not observable
+between steps. Several tests turned out not to test what their names claimed: the flag assertions encoded the
+wrong 8080 rule, the "never sleeps" test measured processor time, and nothing anywhere made a breakpoint fire.
+Cypress now drives the site in a headless browser so the panels are covered by something other than a
+screenshot. The fixes and the reasoning are in `decisions.md` B24-B28.
 
 ## What the machine's determinism bought
 

@@ -63,7 +63,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Context.** A first version of the shell was host C that could never run on the machine.
 
-**Decision.** `src/shell/shell_tpa.c` is written in the project's own C subset, compiled by the project's own compiler to `build/bin/shell.com` (5,115 bytes), and loaded into the TPA at boot. Line input uses BIOS `READLINE`/`LINEGET`/`LINELEN` so the 8080 code never handles raw keystrokes. `halt` returns from `main()` so the post-`main` `HLT` is the one that stops the machine.
+**Decision.** `src/shell/shell_tpa.c` is written in the project's own C subset, compiled by the project's own compiler to `build/bin/shell.com` (2,634 bytes; the v1 shell was 5,115), and loaded into the TPA at boot. Line input uses BIOS `READLINE`/`LINEGET`/`LINELEN` so the 8080 code never handles raw keystrokes. `halt` returns from `main()` so the post-`main` `HLT` is the one that stops the machine.
 
 **Consequences.** The shell is dogfood for the compiler and the strongest demo the project has ("the OS compiles its own shell", roadmap WS6-06). Its command parser is character-by-character because the compiler had no arrays at the time — a limitation WS5 removes.
 
@@ -148,7 +148,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Decision.** `L ∈ {32K, 48K, 64K}`. Only `0x0000–0x3FFF` is fixed; the banked window ends at `TOP−0x2001`, scratch at `TOP−0x1001`, stack at `TOP−0x201`, display at `TOP−0x101`, metadata at `TOP−1`. The loader sets SP before jumping to `0x0100` (as CP/M's CCP did); the compiler stops emitting `LXI SP`. An access at or beyond `L` is a tape fault → `HALT` with reason 4.
 
-**Consequences.** One `.com` runs at every tape size; the shell (5 KB) and every demo are tested at 32 K; the visualizer can show the head hitting the end of the tape.
+**Consequences.** One `.com` runs at every tape size; the shell (2.6 KB) and every demo are tested at 32 K; the visualizer can show the head hitting the end of the tape.
 
 ### B7. The `.cursor/` agent workflow is deleted (this commit)
 
@@ -242,14 +242,6 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 ---
 
-## Part C — Pitfalls worth remembering (from the old `remember.md`)
-
-- **8080 flags.** Auxiliary carry is a carry out of bit 3; parity is *even* parity of the result; `DAA` depends on both AC and CY; `PUSH PSW`/`POP PSW` pack flags as `S Z 0 AC 0 P 1 CY` (bit 1 always set, bits 3 and 5 always clear); `CMP` sets flags but must not write `A`. Each has a dedicated test in `tests/emu/`.
-- **Terminal state.** If native raw mode is enabled (WS1-14) it must be restored on `HALT`, on `SIGINT`, and on every error path — a stuck terminal is the classic emulator bug.
-- **Locals on the 8080 stack.** After `CALL`, `SP` points at the return address; the first local lives at `SP+2`, not `SP+0` — the original codegen overwrote the return address.
-- **Logical-op scratch.** The v1 compiler parked `&&`/`||` intermediates at the fixed address `0x20FC` inside the TPA, so any program whose code crossed that address corrupted itself. v2 keeps them in registers and on the stack (WS1-13, B16); do not reintroduce a fixed scratch cell.
-- **A program's `HLT` is not the machine's.** In RUNNING state `HLT` reloads the shell (transition 5); only the shell's own `HLT` halts the machine (`TOS_HALT_COMMAND`). `TOS_HALT_HLT` is reserved and never written.
-
 ### B17. Every machine starts with a step-0 anchor snapshot; loading a program adds another
 
 **Context.** The snapshot ring only records a slot every `snap_interval` steps. With the interval set to 0 ("never"), time travel would have nothing to seek to, and even with an interval the first thousand steps of a run could not be revisited.
@@ -295,3 +287,61 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 **Decision.** The filesystem keeps each image in a static 512,512-byte buffer (`fs_image_ptr`). The HAL only loads a whole image at `fs_init` (`hal_disk_load`) and saves it on `fs_flush` (`hal_disk_save`); JavaScript writes straight into the buffer and calls `tos_disk_reload`. Sector I/O (`READ`/`WRITE` via DMA) is entirely inside the machine. The metadata block also gained fields the visualizer needs — `TOS_META_FRAME`, `TOS_META_KEYS`, `TOS_META_STOP`, the lever mirror at `0x30…`, `TOS_META_SYSCALL`, `TOS_META_SP_INIT` — all listed in `src/tos.h` and in the generated constants table.
 
 **Consequences.** Two disks cost 1 MB of static memory (fine natively and in the 64 MB wasm heap). Snapshots deliberately exclude the images, so time travel restores the machine but not files written since the snapshot (`decisions.md` B11).
+
+### B24. The 8080's auxiliary carry, and 20H/30H are NOPs
+
+**Context.** An audit compared every ALU flag against the Intel 8080 Programmer's Manual and a reference implementation. `AC` was computed as the half-borrow on `SUB`, `SBB`, `SUI`, `SBI`, `CMP`, `CPI` and `DCR`, which is the complement of what the hardware does, and `ANA`/`ANI` used the 8085 rule of always setting it. `20H` and `30H` executed as the 8085's `RIM` and `SIM`, so `20H` clobbered `A`.
+
+**Decision.** The 8080 subtracts by adding the two's complement, so `AC` is the carry out of bit 3 of `A + ~v + !borrow`: set when there is no borrow from bit 4. `DCR` is `r + 0FFH` by the same rule. `ANA` sets `AC` to the OR of bit 3 of its two operands. `20H` and `30H` are NOPs, in the executor and in the disassembler, matching WS1-05 and `asm.md`. The assembler still accepts the `RIM` and `SIM` mnemonics, which produce those two bytes.
+
+**Consequences.** The manual's own `SUB A` example (A=3EH leaves A=00 with Z, P and AC set) now matches, and `PUSH PSW`, `POP PSW` and a `DAA` after a subtraction see the right bit. Two legacy tests asserted the old value and were corrected. The `rim_value`/`sim_value` fields stay in the frozen `cpu_t` layout, unused.
+
+**Alternatives rejected.** Keeping the 8085 behaviour behind a lever (a second CPU personality to test); leaving `AC` alone because no program in the repository reads it (the machine claims to be an 8080).
+
+### B25. The host loop paces frames and sleeps; the kernel does neither
+
+**Context.** `kernel_step` called `hal_vsync()` on the VSYNC path, which sleeps when the native display is on. `CLAUDE.md`, both frozen kernel headers and three documents say the core never blocks and never reads a clock. The `--hz` throttle also counted time spent waiting for a person as emulated time and then busy-waited to catch up, burning a core.
+
+**Decision.** `kernel_step` returns `KSTOP_VSYNC` and does nothing else; `src/main.c` and `kernel_run` call `hal_vsync()` on that stop. The throttle sleeps through the new `hal_sleep_ms` (a no-op in the browser, which must not block) and restarts its clock after every wait for input. `hal_con_push_pending` joins `hal_con_out_pending` as a helper outside `hal.h` so the API takes back only its own unconsumed input.
+
+**Consequences.** `tos_step` is honest about never sleeping, and a test now proves it: with the display on and one frame per second, three VSYNC stops still return in milliseconds. Throttled runs cost the CPU almost nothing, and the emulated clock keeps its meaning across pauses.
+
+**Alternatives rejected.** Weakening the documented invariant instead of the code; adding a full timer to the HAL (`hal_sleep_ms` is the smallest thing that removes the busy wait).
+
+### B26. Time travel refuses rather than reconstructing the wrong machine
+
+**Context.** The API keeps the last few loaded program images so a seek can replay a `tos_load_com`. With only four slots, the fifth load overwrote the first, and a seek into the first program silently replayed a later one. A failed seek also left the machine stranded at whatever step the replay reached, forward seeks suppressed console output the host had never seen, replays pushed the same trace events a second time, the step-0 anchor was evicted once the ring wrapped, and the dirty-page map still described writes from the abandoned future.
+
+**Decision.** Eight images are kept, each tagged with the serial number of the load that filled it; a replayed load whose slot has been recycled fails the seek instead of loading a different program. A seek that cannot reach its target puts the machine back where it was. Output is suppressed only for steps the host has already seen. The trace is disabled during a replay. Snapshot slot 0 holds the first snapshot forever and the other 31 rotate. Restoring a snapshot clears every page age stamped after that step. The snapshot interval is honoured inside a long `kernel_step` call, so it really does bound how far a seek has to replay.
+
+**Consequences.** `tos_seek` either reconstructs the exact machine of that step or returns -1; there is no third answer. `tests/kernel/test_v2_seek_fidelity.c` covers each case.
+
+**Alternatives rejected.** Keeping every program image ever loaded (unbounded static memory); silently loading the closest image (the failure this fixes).
+
+### B27. The clock lever is native; the browser throttles with `speed`
+
+**Context.** `levers.md`, `status.md` and the levers panel all say the `hz` lever throttles the native run loop and that the browser paces with its own speed control. The browser run loop applied both, so `#/playground?hz=1000` ran about 158 instructions a second while the speed control still read `max`.
+
+**Decision.** The browser run loop uses the speed control alone. The `hz` lever still configures the machine, still travels in the URL, and still throttles `build/turingos`.
+
+**Consequences.** A shared link behaves the way the speed control says it will. Watching a program at a virtual 2 MHz in the browser means choosing that rate with the speed slider.
+
+**Alternatives rejected.** Applying `hz` in the browser and rewriting the three documents (two throttles multiplying into each other is hard to reason about and harder to explain).
+
+### B28. The compiler stops instead of guessing
+
+**Context.** The compiler segfaulted on deeply nested expressions (550 nested calls was enough), read past a 16 KB buffer when a string literal was longer than the buffer it decoded into, accepted calls with the wrong number of arguments (the callee then read its parameters from a frame that did not match), and silently dropped the initialiser of an `__at` variable.
+
+**Decision.** Expressions nest at most 96 deep in the parser and the code generator, reported as `expression nests too deeply`. A call whose argument count differs from the declaration is `wrong number of arguments`. An `__at` variable with an initialiser is `__at variables cannot have an initialiser`, because it names memory the image does not contain. The string copy is clamped to the buffer that was actually written.
+
+**Consequences.** Three new diagnostics, all with the usual `file:line:col: message` shape, documented in `tiny-c.md`. Nothing that compiled before compiles differently.
+
+**Alternatives rejected.** Growing the parser's stack (the limit moves, it does not go away); honouring `__at` initialisers with a startup stub (an image whose data is written by code the user did not ask for).
+
+## Part C — Pitfalls worth remembering (from the old `remember.md`)
+
+- **8080 flags.** Auxiliary carry is a carry out of bit 3; parity is *even* parity of the result; `DAA` depends on both AC and CY; `PUSH PSW`/`POP PSW` pack flags as `S Z 0 AC 0 P 1 CY` (bit 1 always set, bits 3 and 5 always clear); `CMP` sets flags but must not write `A`. Each has a dedicated test in `tests/emu/`.
+- **Terminal state.** If native raw mode is enabled (WS1-14) it must be restored on `HALT`, on `SIGINT`, and on every error path — a stuck terminal is the classic emulator bug.
+- **Locals on the 8080 stack.** After `CALL`, `SP` points at the return address; the first local lives at `SP+2`, not `SP+0` — the original codegen overwrote the return address.
+- **Logical-op scratch.** The v1 compiler parked `&&`/`||` intermediates at the fixed address `0x20FC` inside the TPA, so any program whose code crossed that address corrupted itself. v2 keeps them in registers and on the stack (WS1-13, B16); do not reintroduce a fixed scratch cell.
+- **A program's `HLT` is not the machine's.** In RUNNING state `HLT` reloads the shell (transition 5); only the shell's own `HLT` halts the machine (`TOS_HALT_COMMAND`). `TOS_HALT_HLT` is reserved and never written.

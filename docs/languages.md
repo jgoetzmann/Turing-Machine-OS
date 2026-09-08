@@ -59,7 +59,7 @@ The eight commands `> < + - . , [ ]`; every other character is ignored.
 - Cells are bytes on machine tape 1 (the compiled program issues `OUT 02H` with A = 1) when the machine has two or more tapes (`IN 04H ≥ 2`), otherwise on tape 0. Either way they start at `0x4000` in the banked window, so on a 2-tape machine the BF tape and the program's own code and stack sit on different tapes.
 - Cell count = min(30,000, window size); the pointer starts at cell 0.
 - The prologue clears every cell to 0 before the first command runs, so a program never inherits a previous run's tape (you can watch the sweep in the tape map). The cell count is the same min(30000, window) computed at run time.
-- `,` reads `CONIN` (0 on EOF); `.` writes `CONOUT`. The program ends with `HLT`.
+- `,` reads `CONIN` and `.` writes `CONOUT`. Reading past the end of the console input halts the machine with `TOS_HALT_EOF`, the same as any other program that reads past the end of its input. The program ends with `HLT`.
 - Errors: `line N: unmatched '['`, `line N: unmatched ']'`.
 - `build/bfc <in.bf> <out.com>` on the host; `bf F` in the shell; `tos_compile(3, …)`.
 

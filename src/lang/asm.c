@@ -11,7 +11,8 @@
  *   - forward references resolve in pass 2; ORG / DS / EQU operands must be known in pass 1
  *   - a line shaped like disasm output ("AAAA: BB BB BB  MNEMONIC") is accepted: the listed
  *     bytes are placed verbatim at address AAAA so a disassembly reassembles byte-identically;
- *     the undocumented-alias spellings NOP* / JMP* / RET* / CALL* are accepted as mnemonics too
+ *     the undocumented-alias spellings NOP* / NOP*10.. / JMP* / RET* / CALL* / CALL*ED / CALL*FD
+ *     are accepted as mnemonics too
  *   - output: the bytes from the first emitted address (the ORG in effect) to the last emitted
  *     byte; gaps left by a forward ORG or by DS are zero-filled
  *
@@ -87,6 +88,11 @@ static const mn_t g_mn[] = {
     /* undocumented aliases exactly as disasm_one spells them */
     { "NOP*",  K_NONE,  0x08 }, { "JMP*",  K_IMM16, 0xCB },
     { "RET*",  K_NONE,  0xD9 }, { "CALL*", K_IMM16, 0xDD },
+    /* Where one alias covers several bytes, the byte is part of the spelling, so a disassembly
+       listing assembles back to exactly the bytes it came from. */
+    { "NOP*10", K_NONE, 0x10 }, { "NOP*18", K_NONE, 0x18 }, { "NOP*20", K_NONE, 0x20 },
+    { "NOP*28", K_NONE, 0x28 }, { "NOP*30", K_NONE, 0x30 }, { "NOP*38", K_NONE, 0x38 },
+    { "CALL*ED", K_IMM16, 0xED }, { "CALL*FD", K_IMM16, 0xFD },
     /* directives */
     { "ORG", D_ORG, 0 }, { "DB", D_DB, 0 }, { "DW", D_DW, 0 },
     { "DS",  D_DS,  0 }, { "EQU", D_EQU, 0 }, { "END", D_END, 0 }
@@ -625,11 +631,15 @@ static int parse_listing(char *line, char **rest, uint8_t *bytes, int *nbytes, u
     return 1;
 }
 
-/* Scans an identifier (optionally ending in '*' for the alias spellings). */
+/* Scans an identifier, including the alias spellings: a trailing '*' and, for the aliases that
+   name their own byte, the two hex digits after it (NOP*20, CALL*ED). */
 static char *scan_ident(char *p)
 {
     while (c_idchar((unsigned char)*p)) p++;
-    if (*p == '*') p++;
+    if (*p == '*') {
+        p++;
+        while (c_xdigit((unsigned char)*p)) p++;
+    }
     return p;
 }
 

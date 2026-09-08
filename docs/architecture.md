@@ -164,7 +164,7 @@ Arguments travel in `C` and `DE`; results come back in `A`. Console output goes 
 | 0x04 | AUXIN | — | A = 0 | Stub. |
 | 0x05 | CONST | — | A = 0xFF if a console byte is ready else 0 | |
 | 0x06 | VSYNC | — | — | `BIOS_VSYNC`: the kernel bumps `frame`, renders the display, returns `KSTOP_VSYNC`. |
-| 0x07 | RAND | — | A = next PRNG byte | 8-bit xorshift (`x ^= x<<3; x ^= x>>5; x ^= x<<1`), seeded by the SEED lever; seed 0 acts as 1. |
+| 0x07 | RAND | — | A = next PRNG byte | 8-bit xorshift (`x ^= x<<3; x ^= x>>5; x ^= x<<1`), seeded by the SEED lever; seed 0 acts as 1. The cycle is 17 values long. |
 | 0x08 | TICKS | — | A = frame count & 0xFF | Counts VSYNC frames, never wall-clock time. |
 | 0x09 | SELDISK | C = 0/1 | — | `fs_select_disk`. |
 | 0x0A | SETTRK | C = track | — | 0-based. |
@@ -272,7 +272,7 @@ The other tools share the shape `int xxx(const char *src, uint32_t len, uint8_t 
 
 ## 16. Build targets
 
-`make help` lists them: `all` (native `build/turingos` + tools), `tools`, `shell` (`build/bin/shell.com` via `build/cc_driver`), `gen` (`constants.json`, `layout.json`, the shell blob), `disk`, `demo-disk` (`build/disk/demo.img` from `demos/**` + `SHELL.C`), `test`, `wasm`, `web`, `test-web`, `run`, `bench`, `disasm FILE=…`, `clean`, `help`. Flags: `-std=c99 -Wall -Wextra -Werror -pedantic -I./src`. `build/libtos.a` holds every `src/**/*.c` except `main.c` and `hal_wasm.c` plus the shell blob; the wasm build swaps `hal_posix.c` for `hal_wasm.c`.
+`make help` lists them: `all` (native `build/turingos` + tools), `tools`, `shell` (`build/bin/shell.com` via `build/cc_driver`), `gen` (`constants.json`, `layout.json`, the shell blob), `disk`, `demo-disk` (`build/disk/demo.img` from `demos/**` + `SHELL.C`), `test`, `wasm`, `web`, `test-web`, `test-e2e`, `run`, `bench`, `asm FILE=…`, `tm FILE=…`, `bf FILE=…`, `disasm FILE=…`, `clean`, `help`. Flags: `-std=c99 -Wall -Wextra -Werror -pedantic -I./src`. `build/libtos.a` holds every `src/**/*.c` except `main.c`, `hal_wasm.c` and `src/shell/shell_tpa.c` (which is 8080 source, not host code), plus the shell blob; the wasm build swaps `hal_posix.c` for `hal_wasm.c`.
 
 ## 17. Constants (generated)
 

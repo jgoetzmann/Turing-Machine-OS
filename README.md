@@ -25,6 +25,7 @@ make test        # build the native binary and tools, run the C and shell test s
 make run         # boot the OS in this terminal — try `help`, `dir`, `halt` at the A> prompt
 make web         # WebAssembly + site into web/dist (needs Emscripten 6.0.9 and Node >= 22)
 make test-web    # Node tests over the wasm build
+make test-e2e    # drive the site in a headless browser with Cypress
 make help        # every target
 ```
 

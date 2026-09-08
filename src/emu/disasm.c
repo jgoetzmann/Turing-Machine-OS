@@ -5,19 +5,21 @@
  *   '@'  -> 16-bit immediate (bytes[1] | bytes[2]<<8) printed as four hex digits + "H"
  * Everything else is copied verbatim. Instruction length is derived from
  * the template ('@' = 3, '#' = 2, neither = 1). Undocumented aliases carry
- * a trailing '*' on the mnemonic: NOP*, JMP*, RET*, CALL*.
+ * a trailing '*' on the mnemonic: NOP*, JMP*, RET*, CALL*. Where several bytes share one
+ * alias, the byte is part of the spelling (NOP*10 ... NOP*38, CALL*ED, CALL*FD), so a
+ * listing re-assembles to the bytes it came from.
  */
 #include "disasm.h"
 
 static const char *const k_tmpl[256] = {
     /* 00 */ "NOP",      "LXI B,@",  "STAX B",   "INX B",    "INR B",    "DCR B",    "MVI B,#",  "RLC",
     /* 08 */ "NOP*",     "DAD B",    "LDAX B",   "DCX B",    "INR C",    "DCR C",    "MVI C,#",  "RRC",
-    /* 10 */ "NOP*",     "LXI D,@",  "STAX D",   "INX D",    "INR D",    "DCR D",    "MVI D,#",  "RAL",
-    /* 18 */ "NOP*",     "DAD D",    "LDAX D",   "DCX D",    "INR E",    "DCR E",    "MVI E,#",  "RAR",
-    /* 20 */ "RIM",      "LXI H,@",  "SHLD @",   "INX H",    "INR H",    "DCR H",    "MVI H,#",  "DAA",
-    /* 28 */ "NOP*",     "DAD H",    "LHLD @",   "DCX H",    "INR L",    "DCR L",    "MVI L,#",  "CMA",
-    /* 30 */ "SIM",      "LXI SP,@", "STA @",    "INX SP",   "INR M",    "DCR M",    "MVI M,#",  "STC",
-    /* 38 */ "NOP*",     "DAD SP",   "LDA @",    "DCX SP",   "INR A",    "DCR A",    "MVI A,#",  "CMC",
+    /* 10 */ "NOP*10",   "LXI D,@",  "STAX D",   "INX D",    "INR D",    "DCR D",    "MVI D,#",  "RAL",
+    /* 18 */ "NOP*18",   "DAD D",    "LDAX D",   "DCX D",    "INR E",    "DCR E",    "MVI E,#",  "RAR",
+    /* 20 */ "NOP*20",   "LXI H,@",  "SHLD @",   "INX H",    "INR H",    "DCR H",    "MVI H,#",  "DAA",
+    /* 28 */ "NOP*28",   "DAD H",    "LHLD @",   "DCX H",    "INR L",    "DCR L",    "MVI L,#",  "CMA",
+    /* 30 */ "NOP*30",   "LXI SP,@", "STA @",    "INX SP",   "INR M",    "DCR M",    "MVI M,#",  "STC",
+    /* 38 */ "NOP*38",   "DAD SP",   "LDA @",    "DCX SP",   "INR A",    "DCR A",    "MVI A,#",  "CMC",
     /* 40 */ "MOV B,B",  "MOV B,C",  "MOV B,D",  "MOV B,E",  "MOV B,H",  "MOV B,L",  "MOV B,M",  "MOV B,A",
     /* 48 */ "MOV C,B",  "MOV C,C",  "MOV C,D",  "MOV C,E",  "MOV C,H",  "MOV C,L",  "MOV C,M",  "MOV C,A",
     /* 50 */ "MOV D,B",  "MOV D,C",  "MOV D,D",  "MOV D,E",  "MOV D,H",  "MOV D,L",  "MOV D,M",  "MOV D,A",
@@ -39,9 +41,9 @@ static const char *const k_tmpl[256] = {
     /* D0 */ "RNC",      "POP D",    "JNC @",    "OUT #",    "CNC @",    "PUSH D",   "SUI #",    "RST 2",
     /* D8 */ "RC",       "RET*",     "JC @",     "IN #",     "CC @",     "CALL* @",  "SBI #",    "RST 3",
     /* E0 */ "RPO",      "POP H",    "JPO @",    "XTHL",     "CPO @",    "PUSH H",   "ANI #",    "RST 4",
-    /* E8 */ "RPE",      "PCHL",     "JPE @",    "XCHG",     "CPE @",    "CALL* @",  "XRI #",    "RST 5",
+    /* E8 */ "RPE",      "PCHL",     "JPE @",    "XCHG",     "CPE @",    "CALL*ED @",  "XRI #",    "RST 5",
     /* F0 */ "RP",       "POP PSW",  "JP @",     "DI",       "CP @",     "PUSH PSW", "ORI #",    "RST 6",
-    /* F8 */ "RM",       "SPHL",     "JM @",     "EI",       "CM @",     "CALL* @",  "CPI #",    "RST 7"
+    /* F8 */ "RM",       "SPHL",     "JM @",     "EI",       "CM @",     "CALL*FD @",  "CPI #",    "RST 7"
 };
 
 static const char k_hex[16] = {

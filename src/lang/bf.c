@@ -22,8 +22,9 @@
  *
  * Cells are bytes in the banked window from 4000H on tape 1 (tape 0 on a 1-tape machine);
  * cell count = min(30000, window size) = 8192 @32K, 24576 @48K, 30000 @64K; the pointer wraps
- * inside [0, count). Cells are never cleared. Any character that is not one of the eight
- * commands is ignored; '\n' counts lines (1-based); a NUL byte ends the source.
+ * inside [0, count). The prologue clears every cell before the first command runs. Any character
+ * that is not one of the eight commands is ignored; '\n' counts lines (1-based); a NUL byte ends
+ * the source.
  *
  * Errors (err = "line N: message", -1 returned):
  *   "unmatched '['"       line of the outermost '[' still open at end of input

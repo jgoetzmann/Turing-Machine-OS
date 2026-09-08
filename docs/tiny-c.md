@@ -37,7 +37,9 @@ postfix     := primary [ "++" | "--" ]
 primary     := number | charlit | ident | ident "[" expr "]" | ident "(" [ expr { "," expr } ] ")" | "(" expr ")"
 ```
 
-Lexical rules: `//` and `/* … */` comments; numbers are decimal or `0x` hex; character literals `'A'`, `'\n'`, `'\0'`, `'\\'`, `'\''`; strings use the same escapes; identifiers are at most 31 characters. Lines beginning with `#` are ignored (there is no preprocessor).
+Lexical rules: `//` and `/* … */` comments; numbers are decimal or `0x` hex; character literals `'A'`, `'\n'`,
+`'\0'`, `'\\'`, `'\''`; strings use the same escapes, and also `\t \r \a \b \f \v \e` and `\xNN`; identifiers are at
+most 31 characters. Lines beginning with `#` are ignored (there is no preprocessor).
 
 ## Semantics
 
@@ -46,8 +48,15 @@ Lexical rules: `//` and `/* … */` comments; numbers are decimal or `0x` hex; c
 - `!`, `&&`, `||` and the comparisons yield 0 or 1. Any non-zero value is true. `&&` and `||` short-circuit.
 - Arrays are **global only**. `int a[N]` stores 2-byte little-endian elements; `char s[N]` stores bytes. Indexing is unchecked and the index may be any `int` expression. `char s[N] = "txt"` zero-pads; `int a[3] = {1, 2, 3}` initialises in order. Declaring an array inside a function is the error `local arrays are not supported`.
 - A string literal may appear only as an initialiser or as the argument of `puts`.
-- Globals are zero unless initialised and are laid out in declaration order after the code. `__at(A) type name[N];` places a global at absolute address A and it occupies no image space — the way to name the display (`__at(0xFE00) char vram[256];`) or any other tape region.
-- Functions may be called before they are defined; recursion works; locals live on the 8080 stack (at most 32 per function, at most 4 parameters). A function without `return` returns 0. `main` is the entry point and its return value is ignored.
+- Globals are zero unless initialised and are laid out in declaration order after the code. `__at(A) type name[N];`
+  places a global at absolute address A, where A is any constant expression. It occupies no image space, which is
+  the way to name the display (`__at(0xFE00) char vram[256];`) or any other tape region; for the same reason it
+  cannot have an initialiser, and one is rejected with `__at variables cannot have an initialiser`.
+- Functions may be called before they are defined; recursion works; locals live on the 8080 stack (at most 32 per
+  function, at most 4 parameters). `f(void)` is accepted for a function with no parameters. A call has to pass
+  exactly as many arguments as the function declares, or compilation stops with `wrong number of arguments`,
+  because the callee reads its parameters at fixed offsets from the frame. A function without `return` returns 0.
+  `main` is the entry point and its return value is ignored.
 - Names are case-sensitive. Intrinsic names cannot be redefined.
 
 ## Intrinsics
@@ -69,7 +78,7 @@ Recognised by name and compiled inline. Every intrinsic returns an `int` (0 when
 | `ticks()` | frame counter & 0xFF | TICKS 0x08 |
 | `keys()` | key bitmask | `IN 03H` (= `inp(3)`) |
 | `tape(n)` | select tape n for the banked window | `OUT 02H` (= `outp(2, n)`) |
-| `seldisk(n)` | select disk 0 or 1 | SELDISK 0x09 |
+| `seldisk(n)` | select disk 0 or 1; returns 0 on success, 1 if that disk is not mounted | SELDISK 0x09 |
 | `listdir()` | print the directory | LISTDIR 0x0F |
 | `namech(c)` | append a character to the name buffer | NAMECH 0x12 |
 | `namend()` | type the named file | TYPE 0x13 |
@@ -88,11 +97,15 @@ Key bits for `keys()`: W 1, S 2, UP 4, DOWN 8, SPACE 16, ESC 32, ENTER 64, ANY 1
 0x0100  CALL main
 0x0103  HLT                 ; returning from main halts the program (the shell reloads)
 0x0104  code for every function, in source order
+        runtime helpers (multiply, divide, shift, compare, puts, ...; only the ones used)
         data: globals in declaration order, with initial values
+        string literals
 ```
 
 - The loader sets SP; the compiler **must not emit `LXI SP`**. The same binary therefore runs on a 32K, 48K or 64K tape.
-- Output ≤ 16,128 bytes (the TPA). Source ≤ 32,768 bytes. At most 256 globals and 64 functions.
+- Output ≤ 16,128 bytes (the TPA). Source ≤ 32,768 bytes. At most 256 globals and 64 functions. Expressions nest
+  at most 96 deep; past that the compiler stops with `expression nests too deeply` rather than running out of
+  its own stack.
 - `&&` / `||` intermediates are kept in registers and on the stack — there is no fixed scratch address, so a program larger than 8 KB whose code crosses `0x20FC` is safe (WS1-13).
 
 ## Diagnostics

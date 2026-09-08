@@ -47,7 +47,10 @@ Not a machine lever — a run-loop budget. `speed=<steps per second>` or `speed=
 
 ## 3. PRNG seed (`SEED`)
 
-Seeds the BIOS `RAND` (0x07) generator, an 8-bit xorshift (`x ^= x << 3; x ^= x >> 5; x ^= x << 1`). Seed 0 behaves as seed 1 so the generator never sticks at zero. With the same seed and the same input log, Pong serves in the same direction and Life's random preset is the same board every run — determinism (WS1-16) depends on it.
+Seeds the BIOS `RAND` (0x07) generator, an 8-bit xorshift (`x ^= x << 3; x ^= x >> 5; x ^= x << 1`) whose exact
+shifts are fixed by `bios.h`. Seed 0 behaves as seed 1 so the generator never sticks at zero. That triple cycles
+after 17 draws, so `RAND` is a source of variety, not of statistical randomness: expect a visible pattern if a
+program leans on it heavily. With the same seed and the same input log, Pong serves in the same direction and Life's random preset is the same board every run — determinism (WS1-16) depends on it.
 
 Tests: WS4-05.
 

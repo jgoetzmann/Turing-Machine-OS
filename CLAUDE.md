@@ -8,7 +8,8 @@ natively and to WebAssembly; the site under `web/` runs the real machine.
 
 - `make test`: build everything, run every C and shell test. Run it before calling anything done.
 - `make test-web`: Node tests over the wasm build (needs Emscripten 6.0.9 and Node >= 22).
-- `make test-e2e`: Cypress drives the built site in a headless browser (needs `npm ci` in `web/`).
+- `make test-e2e`: Cypress drives the built site in a headless browser (needs `npm ci` in `web/`; the browser
+  binary lands in `web/node_modules/.cache/cypress`, never in a user-wide cache).
 - `make web`: wasm + demo disk + generated JSON + `npm ci && npm run build` in `web/`.
 - `make run`: boot the OS in this terminal. `make help` lists every target.
 - Single test: `cc -std=c99 -Wall -Wextra -Werror -pedantic -I./src tests/<area>/test_x.c build/libtos.a -o build/tests/x && build/tests/x`.
@@ -42,7 +43,7 @@ natively and to WebAssembly; the site under `web/` runs the real machine.
 | `tools/`, `demos/`, `web/`, `tests/` | host CLIs, demo programs, the site, the test suite |
 
 Docs: `docs/architecture.md` (what is), `docs/decisions.md` (why), `docs/levers.md`, `docs/tiny-c.md`,
-`docs/asm.md`, `docs/tm.md`, `docs/languages.md`, `docs/status.md`, `docs/how-it-was-built.md`.
+`docs/asm.md`, `docs/tm.md`, `docs/languages.md`, `docs/status.md`, `docs/turing-machine.md`.
 `docs/v2-roadmap.md` is the plan and is background only. Docs describe what exists; nothing aspirational.
 
 ## Testing conventions
@@ -60,8 +61,8 @@ Docs: `docs/architecture.md` (what is), `docs/decisions.md` (why), `docs/levers.
 ## Commit conventions
 
 - Imperative subject, at most 72 characters; the body says *why*.
-- **No `Co-Authored-By`, `Generated-by`, session links, or any other tool or AI attribution trailers
-  in commit messages or pull requests, ever.**
+- **No `Co-Authored-By`, `Generated-by`, session links, or any other tool attribution trailers in
+  commit messages or pull requests, ever.**
 - `make test` is green for every commit on `main`. Squash work-in-progress before it lands.
 - Any change to a port, syscall, memory-map region, file format, the HAL or the JS API appends an
   entry (Context / Decision / Consequences / Alternatives) to `docs/decisions.md` in the same commit.

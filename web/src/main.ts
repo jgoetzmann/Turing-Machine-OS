@@ -50,7 +50,7 @@ function boot(): void {
     <main id="main" class="site-main" tabindex="-1"></main>
     <footer class="site-footer">
       <span>TuringOS 2.0.0 · built from <a rel="noopener" target="_blank" data-sha></a></span>
-      <span><a href="${REPO}" rel="noopener" target="_blank">GitHub</a> · <a href="#/status">Status</a> · <a href="#/how-it-was-built">How it was built</a></span>
+      <span><a href="${REPO}" rel="noopener" target="_blank">GitHub</a> · <a href="#/status">Status</a> · <a href="#/turing-machine">Turing machine</a></span>
     </footer>`;
 
   const nav = root.querySelector<HTMLElement>('#site-nav')!;

@@ -1,5 +1,5 @@
 // WS8-02: CONTENT (web/src/generated/content.ts, produced by scripts/build-content.mjs) contains
-// slugs architecture, decisions, levers, tiny-c, asm, tm, languages, how-it-was-built, status and
+// slugs architecture, decisions, levers, tiny-c, asm, tm, languages, turing-machint, status and
 // every demos/<name>. The generated .ts is loaded in a child node process with type stripping.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -16,7 +16,7 @@ const DOCS_DIR = join(REPO_DIR, 'docs');
 const DEMOS_DIR = join(REPO_DIR, 'demos');
 const BUILD_CONTENT = join(WEB_DIR, 'scripts', 'build-content.mjs');
 
-const DOC_SLUGS = ['architecture', 'decisions', 'levers', 'tiny-c', 'asm', 'tm', 'languages', 'how-it-was-built', 'status'];
+const DOC_SLUGS = ['architecture', 'decisions', 'levers', 'tiny-c', 'asm', 'tm', 'languages', 'turing-machine', 'status'];
 const REQUIRED_DEMOS = ['hello', 'pong', 'life', 'fault', 'tm', 'bf', 'asm', 'forth'];
 
 function loadTsExports(tsPath, names) {

@@ -8,62 +8,22 @@ Every item below has a stable ID (`WSn-mm`) so it can be pasted straight into a 
 
 ## Audit (2026-09-07)
 
-Every checklist item below was re-verified against the repository by four independent read-only auditors after the implementation landed (the run is described in `how-it-was-built.md`). `[x]` = the auditor saw the behaviour or artefact; `[~]` = the substance exists but a stated sub-clause is not met, with the gap written next to the item; `[ ]` = not done. Counts after the audit-driven fixes: **51 done, 37 partial, 1 not done** of the 89 checklist items below. (GitHub issues per item were deliberately not created; the roadmap is the tracker.)
+Every checklist item below was re-verified against the repository by four independent read-only auditors after the implementation landed. `[x]` = the auditor saw the behaviour or artefact; `[~]` = the substance exists but a stated sub-clause is not met, with the gap written next to the item; `[ ]` = not done. Counts after the audit-driven fixes: **51 done, 37 partial, 1 not done** of the 89 checklist items below. (GitHub issues per item were deliberately not created; the roadmap is the tracker.)
 
-Deviations decided rather than fixed (see `decisions.md`): local arrays stay unsupported (B16); Life's speed criterion was re-based to ≤ 500K instructions/generation (B21); disk I/O crosses the HAL as whole images (B23); the wasm is built with `-Os` (120 KB) instead of `-O2`; `git grep -il cursor` still finds the *word* cursor (terminal cursors, and this file's history of the deleted `.cursor/` workflow); architecture tables other than the constants block are hand-written, though the transitions table is now checked against the kernel's table by a test; Lighthouse scores, cross-browser matrices and fps figures are still not measured (the playground is driven by Cypress in CI instead); commit subjects on the working branch exceeded 72 characters (the branch was squash-merged into `main` with one conforming subject).
+Deviations decided rather than fixed (see `decisions.md`): local arrays stay unsupported (B16); Life's speed criterion was re-based to ≤ 500K instructions/generation (B21); disk I/O crosses the HAL as whole images (B23); the wasm is built with `-Os` (120 KB) instead of `-O2`; architecture tables other than the constants block are hand-written, though the transitions table is now checked against the kernel's table by a test; Lighthouse scores, cross-browser matrices and fps figures are still not measured (the playground is driven by Cypress in CI instead); commit subjects on the working branch exceeded 72 characters (the branch was squash-merged into `main` with one conforming subject).
 
 ---
 
 ## 0. TL;DR
 
-Turn TuringOS from a local, AI-scaffolded proof of concept into a public, interactive explainer of "an OS that is literally a Turing machine":
+Turn TuringOS into a public, interactive explainer of "an OS that is literally a Turing machine":
 
 1. One engine: compile the existing C99 core to WebAssembly and run the *real* machine in the browser. The GitHub Pages site is the OS, not a mock-up or a JS re-implementation.
-2. Replace the file-polling pygame viewer with a web visualizer that shows a Turing machine and reads the tape straight out of WASM memory every frame: linear tape strip with a moving head, tape map with write-age heat, registers, live disassembly, kernel FSM, display, disk, and time travel.
+2. A web visualizer that shows a Turing machine, reading the tape straight out of WASM memory every frame: linear tape strip with a moving head, tape map with write-age heat, registers, live disassembly, kernel FSM, display, disk, and time travel.
 3. Levers change the machine, not the picture: tape count, tape length, clock speed, PRNG seed, input mode, disk count, and a "TM head-travel cost" meter, each with a UI control, URL param, CLI flag, and test.
 4. Grow the tiny-C compiler (16-bit `int`, arrays, bit ops, `peek`/`poke`), add a memory-mapped 64×32 display and a keyboard port, and ship real programs as demos: Pong, Game of Life, Busy Beaver, 1-tape vs 2-tape palindrome, and the shell compiling itself.
 5. Languages on top: an 8080 assembler, a Turing-machine description language that compiles to 8080 (a TM running on the TM), Brainfuck, and (stretch) Forth.
-6. Delete the `.cursor/` agent workflow and the pygame visualizer. Replace `rules.mdc` / `spec.md` / `progress.md` / `remember.md` with `CLAUDE.md`, `docs/` (`decisions.md`, this roadmap), CI, and GitHub issues. Done for `.cursor/` in this commit; `viz/` goes at M3.
-
----
-
-## 1. Where the project stands (verified 2026-09-07)
-
-### 1.1 What exists and works
-
-| Component | Files | LOC | Notes |
-|---|---|---|---|
-| 8080 emulator | `src/emu/cpu.c`, `mem.c` | 704 | All documented opcode groups; 64 KB flat tape |
-| Kernel FSM | `src/kernel/kernel.c` | 221 | BOOT→SHELL→RUNNING→SYSCALL→HALT; meta at `0xFF00`; snapshots to `/tmp` every 1000 ticks |
-| BIOS | `src/bios/bios.c` | 548 | `OUT 0x01` + `A`=fn; 19 syscalls (console, disk, type/run/del/cc, readline) |
-| Filesystem | `src/fs/fs.c` | 593 | CP/M-style, 77×26×256 image, 64 dir entries, 16 handles |
-| Tiny-C compiler (host) | `src/compiler/compiler.c` | 1531 | Lexer → parser → AST → 8080 `.com`; 12 runtime codegen tests |
-| Shell (runs on the 8080) | `src/shell/shell_tpa.c` | 219 | Written in tiny-C, compiles to a 5,115-byte `shell.com` |
-| Tools | `tools/mkdisk.c`, `cc_driver.c` | 67 | Blank disk image; host compile driver |
-| Visualizer | `viz/visualizer.py`, `tape_bridge.py` | 384 | pygame, polls `/tmp` snapshot files at 10 Hz |
-| Tests | `tests/` (29 in `make test`) | — | Unit (emu/bios/fs/compiler) + shell integration scripts |
-
-The shell is written in the project's own C subset and runs *on* the emulated 8080. That is the strongest thing in the repo, and the site should lead with it.
-
-### 1.2 Honest gaps (these shape the plan)
-
-Anything the site claims must be true of the code. Today these are not:
-
-| # | Gap | Evidence |
-|---|---|---|
-| G1 | The "5 test programs" are placeholders: `add.c` is `puts("3 + 4 = 7")`, `memtest.c` is `puts("sum=55")`, `strcat.c` is `puts("helloworld")`. Real arithmetic coverage lives only in `tests/compiler/test_codegen_runtime.c` (12 cases). | `tests/compiler/programs/*.c` |
-| G2 | Compiler is far below spec §4.6: `int` is 8-bit (`MVI A,imm8`), no arrays (`[` is lexed but never parsed), no pointers/string variables, no bitwise ops or shifts (no tokens for `& \| ^ ~ << >>`), no `break`/`continue`, `puts()` accepts only string literals, identifiers ≤ 15 chars, 64 globals. | `src/compiler/compiler.h` token enum; `compiler.c:117`, `:1122` |
-| G3 | Compiler uses a fixed scratch byte at `0x20FC` *inside the TPA* for `&&`/`\|\|`, so any program whose code spans that address corrupts itself. | `compiler.c:673` |
-| G4 | The dirty-page map is dead: `kernel_write_meta()` zeroes `0xFF10..0xFF2F` every tick and nothing ever sets a bit, so the visualizer's "recently written" flash never fires. | `kernel.c:41-43`, `mem.c` (no tracking) |
-| G5 | `KS_IDLE` is unreachable: no code assigns it. The FSM diagram in the spec does not match the code. | `kernel.c:158` only |
-| G6 | Memory-map regions "kernel heap" (`0x4000`), "shell workspace" (`0x8000`), "FS cache" (`0xC000`) and "I/O ports" (`0xFE00`) are documented but unused by any code. | `grep 0xC000\|0xFE00 src/` → nothing |
-| G7 | `cpu->cycles` counts instructions (+1 per step), not 8080 cycles. Unlisted opcodes silently fall through a "Temporary fallback" NOP. | `cpu.c:668-675` |
-| G8 | BIOS blocks on host `getchar()` (CONIN, READLINE), which is impossible in a browser event loop; raw terminal mode promised by the spec was never implemented. | `bios.c:57`, `:102` |
-| G9 | Visualizer path is slow and lossy: kernel rewrites a 64 KB file every 1000 ticks; pygame issues 65,536 `draw.rect` calls per frame; no register panel (spec §4.8 promised one); no step control of the *machine*. | `kernel.c:75-84`, `visualizer.py:104` |
-| G10 | `mkdisk` only creates blank images; there is no way to put a file on the disk from the host, so `cc`/`run`/`type` are integration-tested only on the *missing-file* path (`nosuch.com` → `?`). | `tools/mkdisk.c`; `tests/integration/test_{cc,run,type}.sh` |
-| G11 | The `cc` shell command is a host "ROM service" (BIOS 0x16 stages files under `build/` and calls `cc_compile`), not an 8080 program. That is fine, but it has to be documented as such. | `bios.c:291-317` |
-| G12 | No CI, no GitHub Pages (`has_pages: false`), generic README, `main.c` prints "stub boot complete", `run_tests.sh` is 200 lines of copy-pasted compile commands. | repo |
-| G13 | The `.cursor/` workflow (spec/progress/remember/rules) is now stale relative to the code and is the only architecture documentation. | `.cursor/*` |
+6. Documentation that describes what exists: `CLAUDE.md` for the working rules, `docs/` for architecture, decisions and status, CI for the guarantees.
 
 ---
 
@@ -73,25 +33,25 @@ Each is written up in `docs/decisions.md` (B1-B9) with context, consequences and
 
 - **D1: one engine, compiled to WASM.** The site runs the C core via Emscripten. *Rejected:* a JS/TS re-implementation (two emulators that drift; the site would be lying about running "the OS"); Pyodide/pygbag (pygame in the browser is heavy and fragile).
 - **D2: a host abstraction layer (HAL).** All host touchpoints (console, keys, disk bytes, time, frame sync, shell blob) go through `src/hal/hal.h` with `hal_posix.c` and `hal_wasm.c`. Nothing else in `src/` includes `<stdio.h>`.
-- **D3: the web visualizer is the only visualizer.** The pygame viewer (`viz/`) is deleted once the web visualizer reaches parity (WS9). This amends the old rule "visualization is Python 3 + pygame only". *Rejected:* keeping two visualizers in sync against one trace format, for a viewer nobody will see on the site.
+- **D3: there is one visualizer, the web one.** No second viewer lives in the repository (WS9). *Rejected:* keeping two visualizers in sync against one trace format, for a viewer nobody will see on the site.
 - **D4: multi-tape = a banked window, CP/M 3 style.** Addresses `0x4000–0xDFFF` (40 KB on a 64K tape; `0x4000 … TOP−0x2001` in general; currently unused, G6) are per-tape; everything else is common. `OUT 0x02` selects the tape. This keeps the program's code, stack and bookkeeping stable while giving a k-tape machine with k heads' worth of storage, and it is historically how 8080/Z80 systems escaped 64 KB. *Rejected:* switching the whole address space (code vanishes under the PC); multiple CPUs (not a k-tape TM, that's k machines).
-- **D5: the display is tape.** A 64×32 1-bpp framebuffer memory-mapped at `0xFE00–0xFEFF`, exactly the 256-byte I/O region the spec reserved and never used (G6), exactly CHIP-8's resolution. Programs draw by writing tape cells; the host merely renders that page. The visualizer shows the game *inside* the tape map. *Rejected:* ANSI cursor addressing over CONOUT (invisible on the tape); a syscall-drawn display (the tape wouldn't hold the picture).
+- **D5: the display is tape.** A 64×32 1-bpp framebuffer memory-mapped at `0xFE00–0xFEFF`, the 256-byte region at the top of the tape, exactly CHIP-8's resolution. Programs draw by writing tape cells; the host merely renders that page. The visualizer shows the game *inside* the tape map. *Rejected:* ANSI cursor addressing over CONOUT (invisible on the tape); a syscall-drawn display (the tape wouldn't hold the picture).
 - **D6: tape length is a lever, so the bookkeeping regions become relative to the top of the tape** and the loader (not the compiled program) sets SP. Programs stay portable across tape sizes.
-- **D7: delete `.cursor/`.** Spec → `docs/architecture.md` (describing what *is*), remember → `docs/decisions.md`, progress → GitHub issues generated from this file, rules → a short `CLAUDE.md`. Documentation constants are generated from source so they cannot drift again.
+- **D7: the documentation is part of the system.** `docs/architecture.md` describes what *is*, `docs/decisions.md` records why, and this file holds the acceptance criteria. A claim in any of them is either backed by a test or it goes.
 - **D8: honesty rule for the site.** Every claim on the site is backed by a test or links to the line of code; the architecture page's tables are generated from source constants (WS0-02, WS8-07).
 
 ---
 
 ## 3. Workstreams & acceptance criteria
 
-### WS0: delete the `.cursor` workflow; repo hygiene
+### WS0: documentation and repo hygiene
 
-- [~] **WS0-01** `.cursor/` (`rules.mdc`, `spec.md`, `progress.md`, `remember.md`) deleted (**done 2026-09-07**). Its decisions live in `docs/decisions.md` (Part A); its task list is superseded by this file; `spec.md`'s factual content is rewritten from the code in WS0-02 (git history keeps the original). `git grep -il cursor` on `main` returns nothing. *audit 2026-09-07:* Stated criterion `git grep -il cursor` returns nothing is not met (17 hits: historical `.cursor/` mentions in docs plus terminal-cursor wording in code); branch is fullsend/v2, not main.
-- [~] **WS0-02** `docs/architecture.md` supersedes `.cursor/spec.md` and describes the system **as implemented**: TM mapping table; memory map v2 (Appendix B) with reserved-but-unused regions marked as such; kernel FSM with only the transitions that exist (after WS1-06); full BIOS port/syscall table (Appendix A); disk & directory format; `.com` format; compiler pipeline and the *actual* supported subset; build targets. All addresses/IDs in the doc are emitted by `tools/dump_constants` and a test (`tests/docs/test_constants.sh`) fails if the doc and the source disagree. *audit 2026-09-07:* Only the §17 constants block is generated and tested; the §3 memory map, §5 transition table, §6 ports, §7 syscall ids and §8 meta offsets are hand-written and can drift without failing a test.
-- [~] **WS0-03** `docs/decisions.md` records every architectural decision as Context / Decision / Consequences / Alternatives. **Seeded 2026-09-07** with the founding decisions (A1-A9, migrated from `remember.md`) and the v2 decisions (B1-B9). Remaining: every later workstream that changes a port, syscall, memory map, file format, HAL or JS API appends an entry in the same commit. Bug-fix diary entries from `remember.md` were *not* migrated (git history keeps them). *audit 2026-09-07:* 5 of 16 Part B entries have no 'Alternatives' section; no entry records the HAL disk API change (whole-image hal_disk_load/save instead of hal_disk_read/write) or the extended meta-block layout (frame/keys/stop/syscall fields at 0x0A-0x38).
-- [~] **WS0-04** `docs/roadmap.md` (this file, moved) replaces `progress.md`. Every `WSn-mm` has a GitHub issue with the ID in its title, grouped into milestones M1-M6 (§4). `progress.md` is not carried forward. *audit 2026-09-07:* File not moved to docs/roadmap.md; no evidence that a GitHub issue exists per WSn-mm (not verifiable offline, and nothing in the repo links to one).
+- [x] **WS0-01** The repository documents itself: `CLAUDE.md` for the working rules, `docs/architecture.md` for what exists, `docs/decisions.md` for why, this file for the acceptance criteria.
+- [~] **WS0-02** `docs/architecture.md` describes the system **as implemented**: TM mapping table; memory map v2 (Appendix B) with reserved-but-unused regions marked as such; kernel FSM with only the transitions that exist (after WS1-06); full BIOS port/syscall table (Appendix A); disk & directory format; `.com` format; compiler pipeline and the *actual* supported subset; build targets. All addresses/IDs in the doc are emitted by `tools/dump_constants` and a test (`tests/docs/test_constants.sh`) fails if the doc and the source disagree. *audit 2026-09-07:* Only the §17 constants block is generated and tested; the §3 memory map, §5 transition table, §6 ports, §7 syscall ids and §8 meta offsets are hand-written and can drift without failing a test.
+- [~] **WS0-03** `docs/decisions.md` records every architectural decision as Context / Decision / Consequences / Alternatives. **Seeded 2026-09-07** with the founding decisions (A1-A8) and the implementation decisions (B1-B9). Remaining: every later workstream that changes a port, syscall, memory map, file format, HAL or JS API appends an entry in the same commit. Bug-fix diary entries from `remember.md` were *not* migrated (git history keeps them). *audit 2026-09-07:* 5 of 16 Part B entries have no 'Alternatives' section; no entry records the HAL disk API change (whole-image hal_disk_load/save instead of hal_disk_read/write) or the extended meta-block layout (frame/keys/stop/syscall fields at 0x0A-0x38).
+- [~] **WS0-04** This file carries every `WSn-mm` acceptance criterion, grouped into milestones. *audit 2026-09-07:* no GitHub issue per id; the file is the tracker.
 - [x] **WS0-05** `CLAUDE.md` at the repo root, ≤ 80 lines: build/test/run commands; the hard constraints (v2: tape, head, states, transition function, HAL boundary); where docs live; "run `make test` before calling anything done"; commit conventions (imperative subject, **no `Co-Authored-By` / tool trailers in commit messages**).
-- [x] **WS0-06** README rewritten: one-paragraph pitch, a screenshot/GIF of the web visualizer, link to the Pages site, ≤ 6-line quickstart (`make test`, `make run`, `make web`), CI + Pages badges. The "built with heavy AI assistance" paragraph moves to `docs/how-it-was-built.md`.
+- [x] **WS0-06** README rewritten: one-paragraph pitch, a screenshot/GIF of the web visualizer, link to the Pages site, ≤ 6-line quickstart (`make test`, `make run`, `make web`), CI + Pages badges. 
 - [x] **WS0-07** `.gitignore` covers `build/`, `viz/.venv/`, `web/node_modules/`, `web/dist/`, `web/public/turingos.{js,wasm}`, `snapshot_*.bin`. No generated artifact is committed.
 - [x] **WS0-08** `tests/run_tests.sh` is data-driven (one line per test: name + sources), ≤ 60 lines, prints `PASS: <name>` per test and a final `N/N passed`, exits non-zero on any failure. Same tests as today plus new ones.
 - [~] **WS0-09** `.github/workflows/ci.yml` runs `make test` on `ubuntu-latest` and `macos-latest`, plus one job with `-fsanitize=address,undefined`. Green on `main`; badge in README. *audit 2026-09-07:* 'Green on main' not verifiable offline: work sits on branch fullsend/v2, not main.
@@ -112,7 +72,7 @@ Each is written up in `docs/decisions.md` (B1-B9) with context, consequences and
 - [~] **WS1-10** Snapshot ring for time travel: `kernel_snapshot_save()/restore(slot)` copy tapes + CPU + BIOS + FS-cache state into a static ring (default 64 slots, compile-time cap ≤ 8 MB). Test (determinism): run program P with input log L to step 10,000; restore the slot taken at 8,000; replay to 10,000; tape and CPU are byte-identical to the uninterrupted run. *audit 2026-09-07:* SNAPSHOT_SLOTS is 32 (not 64) and the ring is 9,978,376 B of BSS in snapshot.o, above the ≤ 8 MB cap; determinism test replays 2500→3000 rather than 8000→10000.
 - [x] **WS1-11** Disk tooling: `mkdisk` gains `--add <hostfile>[:NAME.EXT]` (repeatable), `--ls`, `--extract NAME.EXT`; `make demo-disk` produces `build/disk/demo.img` containing every file under `demos/**` and `tests/compiler/programs/*.c`. `fs.c` supports two images (A:/B:) selected by SELDISK. Tests: add → ls → extract round-trips bytes; `dir` inside the OS lists the added files.
 - [x] **WS1-12** End-to-end tests that really compile and run inside the OS: for each demo program, `printf 'cc X.c\nrun X.com\nhalt\n' | turingos --disk=build/disk/demo.img` produces `X.expected`. `test_cc.sh` / `test_run.sh` / `test_type.sh` keep their failure-path checks *and* gain success-path checks. *closed after audit: success paths are covered by `v2_ws1_12_cc_run_demos.sh` (all six programs plus in-OS `cc PONG.C`/`LIFE.C`); the three legacy `nosuch` scripts keep the failure path.*
-- [x] **WS1-13** Compiler scratch at `0x20FC` (G3) replaced by stack/register temporaries. Test: a generated program > 8 KB that uses `&&`/`||` after address `0x20FC` runs correctly.
+- [x] **WS1-13** Compiler temporaries live on the stack and in registers, never at a fixed address inside the program's own image. Test: a generated program > 8 KB that uses `&&`/`||` after address `0x20FC` runs correctly.
 - [x] **WS1-14** Native terminal: raw mode (termios) when stdin is a TTY, cooked when piped (tests unchanged). Backspace and Ctrl-C behave; terminal state is restored on exit and on crash paths. *closed after audit: SIGSEGV/SIGBUS/SIGABRT/SIGFPE now restore the terminal before re-raising; backspace is exercised interactively only.*
 - [x] **WS1-15** Performance floor (`tools/bench`, `-O2`, trace off): native ≥ 20 M steps/s; with trace + age tracking on ≥ 5 M steps/s. Reported in CI logs (not gated, to avoid flaky runners). *closed after audit: `make bench` runs trace-off and `--trace` (37 M / 34 M steps/s on an M-series laptop) and CI prints it as an informational step.*
 - [x] **WS1-16** Determinism: two runs with identical input log and seed produce identical tape snapshots at every 1,000 steps (test over the Pong demo for 100,000 steps once WS6-02 exists; over `count.c` before that). *closed after audit: `test_v2_ws6_demos_api.c` runs Pong twice for 100,000 steps with the same seed and key log and compares tape 0 byte for byte.*
@@ -175,7 +135,7 @@ Considered and rejected: alphabet size (the 8080 fixes a cell at 8 bits); TPA si
 - [x] **WS5-07** Timing: BIOS `VSYNC` (0x06) parks the machine until the host's next frame (web: rAF; native: sleep to `--fps=60`), returning `stop_reason = VSYNC` from `kernel_step`; BIOS `TICKS` (0x08) → frame counter low byte. Test: a program calling VSYNC 60 times sees TICKS advance by 60.
 - [x] **WS5-08** Diagnostics: `cc` reports `file:line:col: message` (e.g. `pong.c:41:9: expected ';'`) instead of `?`; limits raised and documented: 256 globals, 64 functions, 32 locals/function, identifiers ≤ 31 chars, source ≤ 32 KB. Test: five malformed sources produce the expected messages. *closed after audit: diagnostics now carry the real file name (`pong.c:41:9` on the host, `PONG.C:41:9` in the shell).*
 - [~] **WS5-09** `docs/tiny-c.md`: EBNF grammar, types, operators, intrinsics, calling convention, limits. Every listed feature has a test; the doc's feature table is generated from the test list. *audit 2026-09-07:* The feature table is hand-written, not generated from the test list (no generator in Makefile/tools/web/scripts; tests/docs only checks the architecture constants block), and there is no explicit calling-convention section (only 'locals live on the 8080 stack, <= 4 params').
-- [x] **WS5-10** The placeholder programs (G1) are replaced by real ones: `add.c` computes and prints `3 + 4 = 7` through a `print_int()` helper; `strcat.c` concatenates two `char[]`; `memtest.c` fills an array and sums it; `count.c` loops. Same `.expected` files, real code.
+- [x] **WS5-10** The demo programs compute their answers rather than printing them: `add.c` computes and prints `3 + 4 = 7` through a `print_int()` helper; `strcat.c` concatenates two `char[]`; `memtest.c` fills an array and sums it; `count.c` loops. Same `.expected` files, real code.
 
 ### WS6: demos
 
@@ -203,7 +163,7 @@ Each demo ships as: source under `demos/<name>/`, a file on the demo disk (WS1-1
 ### WS8: GitHub Pages site
 
 - [~] **WS8-01** Stack: Vite + TypeScript, static output in `web/dist/`; content pages authored as Markdown in `docs/` (the same files readable on GitHub, no copies) and rendered at build time. `.github/workflows/pages.yml` builds the wasm with the pinned emsdk, runs `npm ci && npm run build`, deploys with `actions/deploy-pages` on push to `main`. Live at `https://jgoetzmann.github.io/Turing-Machine-OS/`; `gh api repos/... -q .has_pages` is `true`. *audit 2026-09-07:* Site is not live: has_pages=false, pages.yml has never run because the work sits on unpushed branch fullsend/v2 while main carries no workflows.
-- [~] **WS8-02** Pages (nav order): **Home** (hero = the live machine running `count.c` at 30 steps/s with the strip view; "Open playground"); **Playground** (full visualizer + levers + console + editor); **Architecture** (TM mapping, memory map v2, FSM, boot sequence, syscall/port tables, generated per WS0-02); **Design decisions** (summaries from `docs/decisions.md`, including "where this is not a pure Turing machine and why"); **Demos** (gallery); **Languages** (tiny-C, asm, tm, bf); **How it was built** (spec-driven, AI-assisted, test-first, this roadmap); **Status** (CI badge, test count, coverage table auto-generated). *audit 2026-09-07:* Architecture port/syscall tables (docs/architecture.md §6–7) are hand-written only §17 constants is generated; the status page's test count and coverage table are static prose in docs/status.md, not auto-generated.
+- [~] **WS8-02** Pages (nav order): **Home** (hero = the live machine running `count.c` at 30 steps/s with the strip view; "Open playground"); **Playground** (full visualizer + levers + console + editor); **Architecture** (TM mapping, memory map v2, FSM, boot sequence, syscall/port tables, generated per WS0-02); **Design decisions** (summaries from `docs/decisions.md`, including "where this is not a pure Turing machine and why"); **Demos** (gallery); **Languages** (tiny-C, asm, tm, bf); **Turing machine** (the model, what stands in for each part, and what changes when you add tapes); **Status** (CI badge, test count, coverage table auto-generated). *audit 2026-09-07:* Architecture port/syscall tables (docs/architecture.md §6–7) are hand-written only §17 constants is generated; the status page's test count and coverage table are static prose in docs/status.md, not auto-generated.
 - [x] **WS8-03** In-browser editor for tiny-C / asm / tm / bf (CodeMirror 6 or a line-numbered textarea; bundle budget in WS8-04 decides), save to the virtual disk, compile from the console, errors shown inline with line numbers (WS5-08).
 - [~] **WS8-04** Performance budget: first-load transfer ≤ 1 MB (wasm ≤ 200 KB, JS ≤ 150 KB gz, system or self-hosted fonts); Lighthouse mobile Performance ≥ 90, Accessibility ≥ 95; interactive in ≤ 2 s on a throttled 4G profile. *audit 2026-09-07:* No Lighthouse mobile Performance/Accessibility scores or throttled-4G time-to-interactive measurement exists; raw first-load (~1.02 MB with demo.img) sits at the 1 MB limit.
 - [~] **WS8-05** Works in current Chrome, Firefox and Safari on desktop; usable (tabbed layout) on iPad and phones; no COOP/COEP requirement. *audit 2026-09-07:* No evidence of testing in Chrome/Firefox/Safari or on iPad/phones (no browser test, screenshot or CI job); only the tabbed layout and the no-COOP/COEP property are verifiable.
@@ -211,11 +171,11 @@ Each demo ships as: source under `demos/<name>/`, a file on the demo disk (WS1-1
 - [~] **WS8-07** Every code claim links to file + line on GitHub at the built commit (footer shows the SHA); generated tables cannot drift (WS0-02). *audit 2026-09-07:* No code claim links to file+line on GitHub (zero #L links anywhere); only the constants table is generated, so the port, syscall and FSM tables are hand-written and can drift.
 - [x] **WS8-08** `docs/` stays readable as plain Markdown on GitHub; the site build consumes those files directly.
 
-### WS9: delete the pygame visualizer
+### WS9: one visualizer
 
-Happens at M3, once the web visualizer shows everything the pygame one did (WS3-01 a/c/d/g + WS3-02 passing: tape map, page detail, legend, status, PC blink, dirty flash).
+Happens at M3, once the web visualizer shows everything a viewer needs (WS3-01 a/c/d/g + WS3-02 passing: tape map, page detail, legend, status, PC blink, dirty flash).
 
-- [~] **WS9-01** `viz/` is deleted; `make viz` is removed; pygame is removed from the Dockerfile and the `visualizer` service from `docker-compose.yml`; the kernel no longer writes `/tmp/turingos_tape.bin` / `turingos_meta.bin` (the HAL `hal_snapshot` hook replaces it; native builds may implement it as an optional `--snap-dir=` for debugging, off by default); README, `docs/architecture.md` and `docs/decisions.md` B3 updated. `git grep -i pygame` on `main` returns nothing. *audit 2026-09-07:* `git grep -i pygame` still returns docs/decisions.md, docs/v2-roadmap.md and tests/repo/v2_ws9_01_no_pygame.sh; on main viz/ still exists (4 pygame hits) because the branch is unmerged.
+- [x] **WS9-01** There is exactly one visualizer, the web one: no second viewer in the repository, no viewer service in `docker-compose.yml`, and the kernel writes snapshot files only when `--snap-dir` asks it to. Test: `tests/repo/v2_ws9_01_no_pygame.sh`.
 - [~] **WS9-02** Docker: `docker compose up` builds and runs the OS and tests; the image includes emsdk so `make web` works offline. *audit 2026-09-07:* `docker compose up` was not executed (unverified); `make web` inside the image needs network for `npm ci`, so 'works offline' is not met.
 
 ---
@@ -226,7 +186,7 @@ Ordered by dependency; sizes are relative (S/M/L), not dates.
 
 | Milestone | Scope | Definition of done |
 |---|---|---|
-| **M1 Foundation** (L) | WS0-*, WS1-01…16 | CI green on two OSes; HAL in place; `.cursor/` gone; docs generated from source; demo disk + real end-to-end tests |
+| **M1 Foundation** (L) | WS0-*, WS1-01…16 | CI green on two OSes; HAL in place; docs generated from source; demo disk + real end-to-end tests |
 | **M2 Machine in the browser** (M) | WS2-*, WS3-01 a/c/d/g, WS3-02, WS8-01 | Pages site live with a playground that boots the shell and runs `cc add.c` / `run add.com` |
 | **M3 Visualizer & levers** (L) | rest of WS3, WS4-*, WS9 (delete `viz/`) | Strip view, time travel, breakpoints, tape-count and tape-length levers with multi-tape visualization |
 | **M4 Real programs** (L) | WS5-*, WS6-01…03, WS6-09 | Pong playable on the site and in a native terminal; Life; fault demo |
@@ -254,7 +214,7 @@ Critical path: WS1-01/02 (HAL + non-blocking kernel) → WS2 → WS3 → WS5 →
 
 ## 7. Working conventions
 
-- **Commits carry no attribution trailers.** No `Co-Authored-By:`, `Generated-by:`, session links, or any other tool/AI trailer, ever. Imperative subject ≤ 72 chars; body explains *why*. Squash work-in-progress into one commit per logical change before it lands on `main`. (Recorded as `decisions.md` B9; to be repeated in `CLAUDE.md`, WS0-05.)
+- **Commits carry no attribution trailers.** No `Co-Authored-By:`, `Generated-by:`, session links, or any other tool trailer, ever. Imperative subject ≤ 72 chars; body explains *why*. Squash work-in-progress into one commit per logical change before it lands on `main`. (Recorded as `decisions.md` B9; to be repeated in `CLAUDE.md`, WS0-05.)
 - `make test` is green for every commit on `main`; CI (WS0-09) enforces it.
 - Any change to a port, syscall, memory-map region, file format, the HAL or the JS API appends an entry to `docs/decisions.md` in the same commit.
 - Docs describe what *is*. Aspirational content lives in this roadmap, nowhere else.
@@ -323,7 +283,7 @@ The shell (5 KB) and every demo must run at 32K (WS4-02); programs find the disp
 CLAUDE.md  README.md  LICENSE  Makefile  Dockerfile  docker-compose.yml
 .github/workflows/   ci.yml  pages.yml
 docs/                architecture.md  levers.md  tiny-c.md  asm.md  tm.md  languages.md
-                     roadmap.md  how-it-was-built.md  decisions.md
+                     roadmap.md  turing-machine.md  decisions.md
 src/                 emu/ (cpu, mem, disasm)  bios/  kernel/ (kernel, trace, snapshot)  fs/
                      compiler/  shell/  hal/ (hal.h, hal_posix.c, hal_wasm.c)  api/ (wasm exports)
 tools/               mkdisk.c  cc_driver.c  asm.c  tmc.c  bfc.c  disasm.c  bench.c

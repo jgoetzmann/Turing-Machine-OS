@@ -3,6 +3,10 @@
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 
+/* The browser binary belongs to the project, not to the user's home directory: this is what keeps
+   `npm ci` + `npx cypress install` self-contained (see web/.npmrc, which does the same for npm). */
+process.env.CYPRESS_CACHE_FOLDER = process.env.CYPRESS_CACHE_FOLDER ?? 'node_modules/.cache/cypress';
+
 const dev = process.argv.includes('--dev');
 const port = dev ? 5173 : 4173;
 const url = `http://localhost:${port}/Turing-Machine-OS/`;

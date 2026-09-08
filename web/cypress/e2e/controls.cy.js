@@ -195,3 +195,23 @@ describe('site chrome', () => {
     cy.get('[data-theme-toggle]').click().should('contain', 'auto');
   });
 });
+
+describe('documentation pages', () => {
+  it('the Turing machine page is in the nav and explains the tape comparison', () => {
+    cy.visit('#/turing-machine');
+    cy.get('#main').should('contain', 'Turing machine');
+    cy.get('#main').should('contain', 'pal1').and('contain', 'pal2');
+    cy.get('#main').should('contain', 'banked window');
+    cy.get('#site-nav a').contains('Turing machine').should('have.attr', 'href', '#/turing-machine');
+  });
+
+  it('no page claims the machine was built with assistance', () => {
+    for (const path of ['#/', '#/architecture', '#/decisions', '#/turing-machine', '#/status']) {
+      cy.visit(path);
+      cy.get('#main').invoke('text').should((t) => {
+        expect(t).to.not.match(/\bAI\b|artificial intelligence|coding agent/i);
+        expect(t).to.not.match(/\.cursor\b/i);
+      });
+    }
+  });
+});

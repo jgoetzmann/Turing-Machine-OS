@@ -1,5 +1,5 @@
 /* Hash router: #/ home, #/playground, #/architecture, #/decisions, #/demos, #/demos/<name>,
- * #/languages, #/how-it-was-built, #/status, plus any other docs slug in CONTENT. */
+ * #/languages, #/turing-machine, #/status, plus any other docs slug in CONTENT. */
 import type { Bus } from './bus';
 import { CONTENT } from './generated/content';
 import { renderHomePage } from './pages/home';
@@ -42,7 +42,7 @@ export const NAV: { path: string; label: string }[] = [
   { path: '/decisions', label: 'Design decisions' },
   { path: '/demos', label: 'Demos' },
   { path: '/languages', label: 'Languages' },
-  { path: '/how-it-was-built', label: 'How it was built' },
+  { path: '/turing-machine', label: 'Turing machine' },
   { path: '/status', label: 'Status' },
 ];
 

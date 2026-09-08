@@ -24,12 +24,13 @@ The compilers are ROM services by design (`decisions.md` A7, `languages.md`); a 
 | `make demo-disk` | `build/disk/demo.img`, `web/public/demo.img` | — |
 | `make wasm` | `web/public/turingos.{js,wasm}` | Emscripten 6.0.9 (`web/emsdk-version.txt`) |
 | `make web` | `web/dist/` | Node ≥ 22, npm |
+| `make test-e2e` | Cypress run over `web/dist/` | Node ≥ 22; the browser binary installs under `web/node_modules/.cache/cypress` (`web/.npmrc`), not in a user-wide cache |
 | `docker compose up` | runs `make test` in `emscripten/emsdk:6.0.9` + gcc (not exercised by CI; built by hand) | Docker |
 
 ## Tests
 
 - `make test` builds everything and runs `tests/run_tests.sh`: every `tests/**/test_*.c` compiled standalone against `build/libtos.a`, plus every `tests/**/*.sh`. It prints `PASS: <name>` per test and `N/N passed` at the end, and exits non-zero on any failure.
-- `make test` runs 83 tests (43 C files and 40 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 57 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
+- `make test` runs 83 tests (43 C files and 40 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 59 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
 - `make test-web` runs `web/test/*.test.mjs` with `node --test` against the real wasm: boot, a shell session (`dir`, `cc`, `run`, `halt`), every demo's `.expected` output, and `layout.json` against the wasm's actual struct offsets.
 - `make test-e2e` builds the site and drives it with Cypress: the thirteen panels mount and draw, the toolbar
   runs, steps, resets and reports, breakpoints fire, time travel seeks, the levers rebuild the machine without
@@ -68,11 +69,10 @@ Coverage by area (behavior ids from the spec):
 | Speed of tiny-C code | Life costs ~290,000 instructions per generation (3.0 M cycles, so about two thirds of a generation per second at a virtual 2 MHz, dozens per second unthrottled); Pong ≤ 3,700 per frame | 16-bit `HL` arithmetic everywhere, `decisions.md` B21 |
 | Native throughput | ~39 M instructions/s, ~35 M with the trace on (`make bench`, Apple M-series, `-O2`); the wasm build is 120 KB | — |
 
-## Removed in v2
+## Not in this machine
 
-- The Python file-polling viewer and the `viz/` directory, `make viz`, and the `visualizer` Docker service. The kernel no longer writes snapshot files by itself; `--snap-dir=` is an optional debug hook through the HAL.
-- The `.cursor/` agent workflow (`decisions.md` B7). `docs/` and `CLAUDE.md` replaced it.
-- The fixed `0x20FC` scratch byte in the compiler and the 8-bit `int`.
+- No second visualizer, and no snapshot files unless `--snap-dir=` asks for them.
+- No fixed scratch address inside a program's own image, and no 8-bit `int` in the compiler.
 
 ## Out of scope for this version
 

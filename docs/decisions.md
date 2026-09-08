@@ -1,10 +1,13 @@
 # TuringOS design decisions
 
-One entry per decision: **Context → Decision → Consequences → Alternatives rejected.** Append, don't rewrite; when a decision is superseded, mark it and point at the replacement. This file replaces the `[PROJECT INIT]` entries of the deleted `.cursor/remember.md` (Part A) and records the v2 decisions from `docs/v2-roadmap.md` (Part B). Bug-fix diary entries were deliberately not carried over; `git log` has them.
+Every choice that shaped the implementation, one entry each: **Context → Decision → Consequences → Alternatives rejected.**
+Append, don't rewrite. When a decision is superseded, mark it and point at the one that replaced it. A gap in the numbering (B7) is a decision that was about tooling rather than about the machine, and was dropped when the tooling was. Part A holds the
+decisions the whole design rests on, Part B the ones made while building it, and Part C the details that bite whoever
+changes this code next. `git log` has the rest.
 
 ---
 
-## Part A: founding decisions, carried over and restated against the code as it exists
+## Part A: the decisions the design rests on
 
 ### A1. The Turing-machine mapping is a hard constraint, not a metaphor
 
@@ -63,7 +66,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Context.** A first version of the shell was host C that could never run on the machine.
 
-**Decision.** `src/shell/shell_tpa.c` is written in the project's own C subset, compiled by the project's own compiler to `build/bin/shell.com` (2643 bytes; the v1 shell was 5,115), and loaded into the TPA at boot. Line input uses BIOS `READLINE`/`LINEGET`/`LINELEN` so the 8080 code never handles raw keystrokes. `halt` returns from `main()` so the post-`main` `HLT` is the one that stops the machine.
+**Decision.** `src/shell/shell_tpa.c` is written in the project's own C subset, compiled by the project's own compiler to `build/bin/shell.com` (2,643 bytes), and loaded into the TPA at boot. Line input uses BIOS `READLINE`/`LINEGET`/`LINELEN` so the 8080 code never handles raw keystrokes. `halt` returns from `main()` so the post-`main` `HLT` is the one that stops the machine.
 
 **Consequences.** The shell is dogfood for the compiler and the strongest demo the project has ("the OS compiles its own shell", roadmap WS6-06). Its command parser is character-by-character because the compiler had no arrays at the time, a limitation WS5 removes.
 
@@ -81,20 +84,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Consequences.** Builds identically with gcc, clang and Emscripten; the sanitizer job in CI (WS0-09) needs no special-casing.
 
-### A9. Superseded founding decisions
-
-| Original decision | Status | Replaced by |
-|---|---|---|
-| "FS buffer cache lives at `mem[0xC000–0xEFFF]`; sectors are read directly into the tape" | **Never implemented**. `fs.c` uses host static buffers; sectors land wherever `SETDMA` points | B4 repurposes the region; DMA into the tape is already how `READ`/`WRITE` work |
-| "Kernel writes `/tmp/turingos_tape.bin` every 1000 ticks for the visualizer" | Superseded | B2 (HAL snapshot hook) + B3 (web visualizer reads WASM memory directly) |
-| "Visualization is Python 3 + pygame only; no web servers, no Electron" | Superseded | B3: the visualizer is a static web page; `viz/` is deleted at M3 |
-| "Docker is the primary dev environment; venv is for the visualizer only" | Superseded | Native `make test` on macOS/Linux and the web build are primary; Docker remains a convenience (WS9-02) |
-| "Raw terminal mode in CONIN" | Never implemented | WS1-14 (termios when stdin is a TTY, cooked when piped) |
-| `.cursor/` spec / progress / remember / rules workflow | **Deleted 2026-09-07** | B7 |
-
----
-
-## Part B: v2 decisions (2026-09-07)
+## Part B: decisions made while building it
 
 ### B1. One engine: the C core compiles to WebAssembly and the website runs it
 
@@ -104,7 +94,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Consequences.** Requires B2 (nothing in the core may block or touch files). Threads are unavailable on GitHub Pages (no COOP/COEP headers → no `SharedArrayBuffer`), so the engine runs on the main thread with a per-frame step budget.
 
-**Alternatives rejected.** JS/TS rewrite (two emulators drift; the site would be lying); Pyodide/pygbag to run the pygame viewer in the browser (heavy, fragile, and still leaves two visualizers).
+**Alternatives rejected.** a JavaScript rewrite (two emulators drift, and the site would be lying about which one you are watching); a Python runtime in the browser (heavy, fragile, and still leaves two visualizers).
 
 ### B2. A host abstraction layer (HAL) is the machine's only door to the world
 
@@ -114,13 +104,15 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Consequences.** The machine becomes a pure function of (program, input log, seed), which is what makes time travel (WS1-10) and determinism tests (WS1-16) possible.
 
-### B3. The web visualizer is the only visualizer; `viz/` (pygame) is deleted
+### B3. There is one visualizer, and it reads the machine's memory directly
 
-**Context.** The pygame viewer polls a 64 KB file every 100 ms, redraws 65,536 rectangles per frame, has no register panel, and its dirty-flash feature has never worked (the dirty map is zeroed every tick and never set). Keeping it alongside a web visualizer means every panel exists twice.
+**Context.** A visualizer that polls a snapshot file shows a picture of the machine as it was some milliseconds ago, cannot show registers between instructions, and needs its own copy of every layout constant. Two visualizers means every panel exists twice and the second one is always the stale one.
 
-**Decision.** One visualizer, in TypeScript + Canvas2D, reading the tape straight out of WASM memory each frame. `viz/` is deleted at milestone M3, once the web visualizer covers everything the pygame one showed (roadmap WS9-01). Native builds keep an optional `--snap-dir=` debug hook through the HAL, off by default.
+**Decision.** One visualizer, in TypeScript and Canvas2D, reading the tape, the registers and the metadata block straight out of WASM memory each animation frame. Offsets come from `layout.json` and `constants.json`, generated from the headers, so a struct change moves the panels rather than breaking them silently. Native builds keep an optional `--snap-dir=` debug hook through the HAL, off by default.
 
-**Alternatives rejected.** Fix pygame and keep both (double maintenance for a viewer nobody sees on the site); a native GUI (Qt/SDL), which has the same problem.
+**Consequences.** The page shows the machine as it is this frame, at whatever rate the speed control asks for, and a panel cannot drift from the machine it draws. The cost is that the visualizer only exists where the wasm build does.
+
+**Alternatives rejected.** A second, native GUI (the same divergence, twice the panels); polling a file (a picture of the past, and a format to keep in sync).
 
 ### B4. Multiple tapes = a banked window, CP/M 3 style
 
@@ -150,14 +142,6 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Consequences.** One `.com` runs at every tape size; the shell (2.6 KB) and every demo are tested at 32 K; the visualizer can show the head hitting the end of the tape.
 
-### B7. The `.cursor/` agent workflow is deleted (this commit)
-
-**Context.** `rules.mdc`, `spec.md`, `progress.md` and `remember.md` were the scaffolding for the AI-assisted build. They were the only architecture documentation, and they had drifted from the code (the spec's memory map, FSM, compiler subset and visualizer features all describe things that don't exist as written).
-
-**Decision.** Delete the directory outright. Replacements: architecture → `docs/architecture.md`, written from the code with constants generated from source (WS0-02); decisions → this file; task tracking → `docs/v2-roadmap.md` + GitHub issues keyed by `WSn-mm`; agent rules → a short `CLAUDE.md` (WS0-05). The old files stay reachable in git history at `74a8714` and earlier.
-
-**Consequences.** Until WS0-02 lands, `docs/v2-roadmap.md` §1 is the most accurate description of the system. Documentation must describe what *is*; anything aspirational belongs in the roadmap.
-
 ### B8. Honesty rule: every claim on the site is backed by a test or a link to the line
 
 **Context.** The "5 test programs" were placeholders that `puts()` the expected answer; the dirty map never worked; `KS_IDLE` was unreachable; several memory-map regions were fiction. A public explainer cannot be built on that.
@@ -168,7 +152,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Context.** Automated tooling likes to append `Co-Authored-By:` and similar attribution trailers to commits.
 
-**Decision.** Commit messages carry **no** `Co-Authored-By:`, `Generated-by:`, session links, or any other tool/AI attribution trailer. Subjects are imperative and ≤ 72 characters; the body says *why*. Noisy work-in-progress is squashed into one commit per logical change before it lands on `main`. `make test` must be green for every commit on `main`. Any change to an interface (port, syscall, memory map, file format, HAL, JS API) appends an entry to this file in the same commit.
+**Decision.** Commit messages carry **no** `Co-Authored-By:`, `Generated-by:`, session links, or any other tool attribution trailer. Subjects are imperative and ≤ 72 characters; the body says *why*. Noisy work-in-progress is squashed into one commit per logical change before it lands on `main`. `make test` must be green for every commit on `main`. Any change to an interface (port, syscall, memory map, file format, HAL, JS API) appends an entry to this file in the same commit.
 
 ### B10. The site is a hash-routed single page; docs are Markdown rendered at build time
 
@@ -212,7 +196,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 ### B14. The loader sets SP; no compiler emits `LXI SP`
 
-**Context.** B6 made the top of the stack depend on L. The v1 compiler emitted `LXI SP,0FDFFH` in every program, tying each binary to a 64K tape.
+**Context.** B6 made the top of the stack depend on L, so a program that sets SP itself is tied to the tape length it was compiled for.
 
 **Decision.** Boot, `RUN` and `tos_load_com` set `SP = TOS_STACK_TOP(L)`, `PC = 0x0100` and the tape selection to 0 before the first instruction. tiny-C, the assembler's output, the TM and Brainfuck compilers never emit `LXI SP`. The value is published at `TOS_META_SP_INIT`. A tiny-C image begins with `CALL main ; HLT`.
 
@@ -232,7 +216,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 ### B16. Tiny-C v2 scope: 16-bit `int`, unsigned `char`, global arrays only
 
-**Context.** v1's `int` was 8 bits, there were no arrays, no bitwise operators, no `break`/`continue`, `puts` took only literals, and `&&`/`||` used a scratch byte at `0x20FC` inside the TPA. Pong, Life, Forth and a real shell need more; a full C would not fit the 8080's register set or the project's size.
+**Context.** Pong, Life, Forth and a shell that compiles itself need 16-bit arithmetic, arrays, bit operations and the usual control flow; a full C would not fit the 8080's register set or the project's size.
 
 **Decision.** `int` is signed 16-bit, `char` unsigned 8-bit, all arithmetic 16-bit, signed comparisons, logical `>>`, division by zero yields 0. Arrays are global only (`int` 2-byte little-endian, `char` 1-byte), with `__at(A)` for absolute placement and `{…}`/string initialisers. Full operator set including bitwise, shifts, compound assignment, prefix and postfix `++`/`--`; `do/while`, `break`, `continue`, `else if`; recursion; ≤ 4 parameters and ≤ 32 locals on the 8080 stack; intrinsics for the console, memory, ports, BIOS and the shell services. No pointers, structs, `switch`, `?:`, `sizeof`, floats, local arrays or string variables beyond `char[]`. Diagnostics are `src.c:LINE:COL: message`. The fixed scratch address is gone.
 
@@ -348,10 +332,10 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Alternatives rejected.** Qualifying the claim in `asm.md` instead (the round trip is the point of having a disassembler in a machine that assembles); making the assembler infer the byte from context (there is no context).
 
-## Part C: pitfalls worth remembering (from the old `remember.md`)
+## Part C: details that bite
 
 - 8080 flags: auxiliary carry is a carry out of bit 3; parity is *even* parity of the result; `DAA` depends on both AC and CY; `PUSH PSW`/`POP PSW` pack flags as `S Z 0 AC 0 P 1 CY` (bit 1 always set, bits 3 and 5 always clear); `CMP` sets flags but must not write `A`. Each has a dedicated test in `tests/emu/`.
 - Terminal state: if native raw mode is enabled (WS1-14) it must be restored on `HALT`, on `SIGINT`, and on every error path. A stuck terminal is the classic emulator bug.
 - Locals live on the 8080 stack: after `CALL`, `SP` points at the return address; the first local lives at `SP+2`, not `SP+0`. The original codegen overwrote the return address.
-- **Logical-op scratch.** The v1 compiler parked `&&`/`||` intermediates at the fixed address `0x20FC` inside the TPA, so any program whose code crossed that address corrupted itself. v2 keeps them in registers and on the stack (WS1-13, B16); do not reintroduce a fixed scratch cell.
+- **No fixed scratch address.** `&&` and `||` intermediates live in registers and on the stack. A fixed scratch cell inside the TPA corrupts any program whose code grows past it, which is why there is not one (WS1-13, B16).
 - A program's `HLT` is not the machine's: in RUNNING state `HLT` reloads the shell (transition 5); only the shell's own `HLT` halts the machine (`TOS_HALT_COMMAND`). `TOS_HALT_HLT` is reserved and never written.

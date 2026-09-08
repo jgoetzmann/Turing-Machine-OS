@@ -69,7 +69,8 @@ Native flags: `build/turingos [--tapes=1|2|4] [--len=32768|49152|65536] [--hz=N]
 - [Levers](docs/levers.md): tape count, tape length, clock, seed, input mode, disks, trace, snapshots.
 - [Languages](docs/languages.md), [tiny-C](docs/tiny-c.md), [8080 assembler](docs/asm.md), [TM language](docs/tm.md).
 - [Design decisions](docs/decisions.md): every choice with its context, consequences and rejected alternatives, including where this is not a pure Turing machine and why.
-- [How it was built](docs/how-it-was-built.md), [Status](docs/status.md), and the [v2 roadmap](docs/v2-roadmap.md) it was built from.
+- [The machine as a Turing machine](docs/turing-machine.md): what the model asks for, what this does instead, and what measurably changes when you add tapes.
+- [Status](docs/status.md): what runs where, what is tested, and where the edges are.
 
 ## Contributing
 

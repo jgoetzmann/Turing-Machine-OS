@@ -65,12 +65,12 @@ jobs:
         run: make test-web
       - name: Build the site
         run: cd web && npm run build
-      - name: Cache the Cypress binary
+      - name: Cache the Cypress browser binary
         uses: actions/cache@v4
         with:
-          path: ~/.cache/Cypress
+          path: web/node_modules/.cache/cypress
           key: cypress-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
-      - name: Install the Cypress binary
+      - name: Install the Cypress browser binary
         run: cd web && npx cypress install
       - name: End-to-end tests in a headless browser
         run: cd web && npm run e2e

@@ -76,7 +76,7 @@ static uint8_t run_compiled_program(const unsigned char *bin, int bin_len, char 
         failf("compiled binary is empty", NULL);
     }
 
-    mem_init();
+    mem_init(1u, 65536u);
     bios_init();
     cpu_init(&cpu);
 
@@ -102,7 +102,7 @@ static uint8_t run_compiled_program(const unsigned char *bin, int bin_len, char 
         failf("program did not halt within step budget", NULL);
     }
     out[out_len] = '\0';
-    return cpu.a;
+    return cpu.l;
 }
 
 static void run_case(const char *name, const char *src, const char *expected_out, int expected_a) {
@@ -155,7 +155,7 @@ int main(void) {
              NULL,
              7);
     run_case("while_count",
-             "int main(){ i=0; while(i<5){ i=i+1; } return i; }",
+             "int main(){ int i; i=0; while(i<5){ i=i+1; } return i; }",
              NULL,
              5);
     run_case("mul_div",

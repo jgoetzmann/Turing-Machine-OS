@@ -1,0 +1,7 @@
+[
+  {"panel": "levers", "text": "Set tape length to 32768 and reset. The banked window now ends at 0x5FFF and the metadata block sits at 0x7F00."},
+  {"panel": "tapemap", "text": "The write head climbs from 0x4000 one cell at a time. Each 256-byte page turns into a bar as it is written."},
+  {"panel": "console", "text": "Every 4 KB the program prints its address: 4000, 5000, 6000, 7000. There is no 8000 line."},
+  {"panel": "fsm", "text": "The STA to 0x8000 faults. The kernel completes the instruction, then takes transition 10, RUNNING -> HALT, reason TAPE_FAULT."},
+  {"panel": "detail", "text": "Reads beyond the tape return 0xFF and writes are dropped. Switch to 65536 and rerun: the walk wraps and the shell comes back."}
+]

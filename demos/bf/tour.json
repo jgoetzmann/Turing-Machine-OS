@@ -1,0 +1,6 @@
+[
+  {"panel": "editor", "text": "Eight commands. Everything else in the file is a comment, so the notes at the top avoid dots, commas and hyphens."},
+  {"panel": "tapemap", "text": "Cells start at 0x4000 in the banked window. hello.bf touches only a handful of bytes; the writes cluster in one page."},
+  {"panel": "tapes", "text": "With the tapes lever at 2 the cells move to tape 1. Select tape 1 here and tape 0's window stays empty."},
+  {"panel": "fsm", "text": "Each . is a CONOUT syscall: RUNNING -> SYSCALL -> RUNNING once per character."}
+]

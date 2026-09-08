@@ -4,7 +4,7 @@
 #include <stdio.h>
 
 static int test_mem_boundaries(void) {
-    mem_init();
+    mem_init(1u, 65536u);
 
     ASSERT(mem_read((addr_t)0x0000u) == 0x00u);
     ASSERT(mem_read((addr_t)0x7FFFu) == 0x00u);

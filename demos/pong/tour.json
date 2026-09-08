@@ -1,0 +1,7 @@
+[
+  {"panel": "display", "text": "The ball starts at the centre and waits 120 frames before its first serve. W and S move the left paddle; UP and DOWN take over the right one."},
+  {"panel": "levers", "text": "Set the input lever to keys. Change the seed lever and reset: rand() picks each serve, so a different seed gives a different game."},
+  {"panel": "tapemap", "text": "The framebuffer is the 256 bytes just below the metadata block. Only the pixels that moved get written each frame: watch the tiny write cluster."},
+  {"panel": "fsm", "text": "Once per frame the program calls VSYNC (OUT 1, A=6). The kernel returns KSTOP_VSYNC, the host draws the screen, and RUNNING resumes."},
+  {"panel": "stats", "text": "A frame costs a few hundred instructions. Compare steps per frame here with a full-screen redraw, which would need thousands."}
+]

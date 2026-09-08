@@ -1,0 +1,6 @@
+node_modules/
+dist/
+public/turingos.js
+public/turingos.wasm
+public/demo.img
+src/generated/

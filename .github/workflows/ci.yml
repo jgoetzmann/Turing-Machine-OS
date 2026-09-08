@@ -1,0 +1,66 @@
+# TuringOS v2 CI (SPEC §Stack "CI", WS0-09).
+#   native   : `make test` on ubuntu-latest and macos-latest
+#   sanitize : `make test` under AddressSanitizer + UndefinedBehaviorSanitizer on ubuntu
+#   web      : wasm build (Emscripten pinned in web/emsdk-version.txt) + Node tests + Vite build
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  native:
+    name: native (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain versions
+        run: |
+          cc --version
+          make --version | head -1
+      - name: Build and run the C + shell test suite
+        run: make test
+      - name: Report native throughput (informational, never gates)
+        run: make bench || true
+
+  sanitize:
+    name: sanitize (ASan + UBSan)
+    runs-on: ubuntu-latest
+    env:
+      ASAN_OPTIONS: detect_leaks=0
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and test with sanitizers
+        run: EXTRA_CFLAGS="-fsanitize=address,undefined" EXTRA_LDFLAGS="-fsanitize=address,undefined" make test
+
+  web:
+    name: web (wasm + node tests + vite build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read the pinned Emscripten version
+        id: emsdk
+        run: echo "version=$(tr -d '[:space:]' < web/emsdk-version.txt)" >> "$GITHUB_OUTPUT"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ steps.emsdk.outputs.version }}
+          actions-cache-folder: emsdk-cache
+      - name: Toolchain versions
+        run: |
+          emcc --version | head -1
+          node --version
+          npm --version
+      - name: Install web dev dependencies
+        run: cd web && npm ci
+      - name: Node tests over the wasm build
+        run: make test-web
+      - name: Build the site
+        run: cd web && npm run build

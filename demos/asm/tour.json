@@ -1,0 +1,6 @@
+[
+  {"panel": "editor", "text": "A dozen instructions: HL walks the string, C carries the byte, A carries the BIOS function id, OUT 1 makes the call. CPI 5FH swaps the stored '_' for a space."},
+  {"panel": "cpu", "text": "Step through the loop and watch HL advance by one per character while PC circles between LOOP and JMP LOOP."},
+  {"panel": "fsm", "text": "OUT 1 is transition 4 (RUNNING -> SYSCALL). The BIOS prints the byte and transition 3 hands control back."},
+  {"panel": "detail", "text": "The message bytes live right after HLT at the end of the image. Select that address to see 'HELLO_FROM_ASM' followed by 10 and 0."}
+]

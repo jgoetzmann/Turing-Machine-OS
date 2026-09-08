@@ -1,6 +1,7 @@
 #ifndef TURINGOS_COMPILER_H
 #define TURINGOS_COMPILER_H
-
+/* Tiny-C v2 compiler (host-side "ROM service"). Function prototypes are frozen; the enums may be
+ * extended by the compiler slice (append only — never remove or reorder existing members). */
 #include <stdint.h>
 
 typedef enum {
@@ -38,7 +39,30 @@ typedef enum {
     CC_TOK_GE,
     CC_TOK_AND_AND,
     CC_TOK_OR_OR,
-    CC_TOK_NOT
+    CC_TOK_NOT,
+    /* v2 additions (append only) */
+    CC_TOK_AMP,
+    CC_TOK_PIPE,
+    CC_TOK_CARET,
+    CC_TOK_TILDE,
+    CC_TOK_SHL,
+    CC_TOK_SHR,
+    CC_TOK_INC,
+    CC_TOK_DEC,
+    CC_TOK_PLUS_ASSIGN,
+    CC_TOK_MINUS_ASSIGN,
+    CC_TOK_STAR_ASSIGN,
+    CC_TOK_SLASH_ASSIGN,
+    CC_TOK_PERCENT_ASSIGN,
+    CC_TOK_AMP_ASSIGN,
+    CC_TOK_PIPE_ASSIGN,
+    CC_TOK_CARET_ASSIGN,
+    CC_TOK_SHL_ASSIGN,
+    CC_TOK_SHR_ASSIGN,
+    CC_TOK_KW_BREAK,
+    CC_TOK_KW_CONTINUE,
+    CC_TOK_KW_DO,
+    CC_TOK_KW_AT          /* __at */
 } cc_token_kind_t;
 
 typedef struct {
@@ -63,7 +87,14 @@ typedef enum {
     CC_AST_CALL,
     CC_AST_RETURN,
     CC_AST_LITERAL,
-    CC_AST_IDENT
+    CC_AST_IDENT,
+    /* v2 additions (append only) */
+    CC_AST_INDEX,
+    CC_AST_BREAK,
+    CC_AST_CONTINUE,
+    CC_AST_DO_WHILE,
+    CC_AST_ARRAY_DECL,
+    CC_AST_POSTFIX
 } cc_ast_kind_t;
 
 typedef struct {
@@ -83,6 +114,9 @@ int cc_parse(const char *src,
              int token_count,
              cc_ast_node_t *nodes,
              int max_nodes);
-int cc_compile(const char *src_path, const char *out_path);
+int cc_compile(const char *src_path, const char *out_path);   /* host CLI convenience; 0 ok, -1 error (message on stderr) */
+/* Buffer form used by the BIOS and the API: returns output length or -1; on error writes "file:line:col: message"
+ * (file = "src.c") into err. */
+int cc_compile_buf(const char *src, uint32_t len, uint8_t *out, uint32_t cap, char *err, uint32_t errcap);
 
 #endif

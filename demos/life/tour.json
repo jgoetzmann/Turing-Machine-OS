@@ -1,0 +1,7 @@
+[
+  {"panel": "display", "text": "Five cells near the middle: the R-pentomino. Every vsync is one generation."},
+  {"panel": "tapemap", "text": "The board lives in the banked window, not on the screen: cells[] at 0x4000, one byte per cell. Watch each generation rewrite it top to bottom, row by row."},
+  {"panel": "strip", "text": "Follow the head along one row: eight neighbour reads, one write, and the wrap at x=63 jumping back to x=0."},
+  {"panel": "levers", "text": "Try hz=2000000 for a few generations per second, or max to let the host run flat out. SPACE reseeds from rand(), so the seed lever decides the soup."},
+  {"panel": "timeline", "text": "Scrub back to an earlier step: the snapshot ring restores both arrays and the display, and replay reaches the exact same generation."}
+]

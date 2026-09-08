@@ -1,0 +1,7 @@
+[
+  {"panel": "editor", "text": "A TM file is a few rules: state, symbol read, symbol written, move, next state. tm NAME compiles it to an 8080 program that steps a real tape."},
+  {"panel": "strip", "text": "The head starts at 0x5000, 4096 bytes into the banked window. Busy beavers wander left and right from there, one cell per rule."},
+  {"panel": "stats", "text": "Travel is the sum of head jumps. Run pal1.tm and pal2.tm on the same 32-character palindrome: one tape is quadratic, two tapes are linear."},
+  {"panel": "tapes", "text": "pal2.tm is best with the tapes lever at 2. Its second TM tape then lives on machine tape 1 at the same window offset; select it here to see the copy."},
+  {"panel": "console", "text": "On halt the program prints the final state (yes or no), the visited part of each tape with blanks trimmed, and steps=N."}
+]

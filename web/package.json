@@ -1,0 +1,22 @@
+{
+  "name": "turingos-web",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TuringOS v2 browser front-end: hash-routed single page that boots the WebAssembly machine and renders the visualizer.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "content": "node scripts/build-content.mjs",
+    "build": "npm run content && tsc --noEmit && vite build",
+    "dev": "npm run content && vite",
+    "test": "node --test test/"
+  },
+  "devDependencies": {
+    "@types/node": "26.5.0",
+    "marked": "18.0.11",
+    "typescript": "7.0.2",
+    "vite": "8.2.2"
+  }
+}

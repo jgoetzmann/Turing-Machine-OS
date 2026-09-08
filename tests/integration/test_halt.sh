@@ -4,7 +4,7 @@ set -eu
 OUT="$(./build/turingos </dev/null)"
 
 case "$OUT" in
-  *"state=5"*) ;;
+  *"reason=EOF"*) ;;
   *)
     echo "FAIL: halt state not observed" >&2
     exit 1

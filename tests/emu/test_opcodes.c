@@ -25,7 +25,7 @@ static void assert_u16(uint16_t expected, uint16_t actual, const char *label) {
 
 int main(void) {
     cpu_t cpu;
-    mem_init();
+    mem_init(1u, 65536u);
     cpu_init(&cpu);
 
     /* Data transfer group: MVI A,d8 */

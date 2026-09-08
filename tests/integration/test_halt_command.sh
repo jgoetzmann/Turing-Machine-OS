@@ -8,7 +8,7 @@ case "$OUT" in *"HALT"*) ;; *)
     exit 1
     ;;
 esac
-case "$OUT" in *"state=5"*) ;; *)
+case "$OUT" in *"reason=COMMAND"*) ;; *)
     echo "FAIL: expected kernel halt (state=5) after shell halt" >&2
     exit 1
     ;;

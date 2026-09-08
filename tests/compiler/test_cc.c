@@ -72,7 +72,7 @@ int main(void) {
     }
 
     compile_case("add", "int main(){ return 3+4; }");
-    compile_case("loop", "int main(){ i=0; while(i<4){ i=i+1; } return i; }");
+    compile_case("loop", "int main(){ int i; i=0; while(i<4){ i=i+1; } return i; }");
     compile_case("call", "int f(){ return 7; } int main(){ return f(); }");
     compile_case("io", "int main(){ puts(\"HELLO\"); return 0; }");
     compile_case("logic", "int main(){ return (1&&2) || 0; }");

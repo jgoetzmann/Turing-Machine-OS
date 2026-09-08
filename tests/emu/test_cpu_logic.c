@@ -17,7 +17,7 @@ static void assert_u8(const char *label, uint8_t expected, uint8_t actual) {
 
 int main(void) {
     cpu_t cpu;
-    mem_init();
+    mem_init(1u, 65536u);
     cpu_init(&cpu);
 
     /* MVI A,0xF0 ; ANI 0x0F => A=0x00, Z set, CY clear */

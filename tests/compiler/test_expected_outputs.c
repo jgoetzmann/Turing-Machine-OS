@@ -2,13 +2,14 @@
 #include "../../src/compiler/compiler.h"
 #include "../../src/emu/cpu.h"
 #include "../../src/emu/mem.h"
+#include "../../src/hal/hal.h"
 
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#define CASE_DIR "tests/compiler/programs"
+#define CASE_DIR "demos/hello"
 #define BUILD_DIR "build/tests/compiler/expected_runtime"
 #define MAX_BIN_SIZE 16384
 #define MAX_OUTPUT 2048
@@ -27,7 +28,7 @@ static const case_spec_t k_cases[] = {
     {"count", "count.c", "count.expected", NULL},
     {"echo", "echo.c", "echo.expected", "hello\n"},
     {"memtest", "memtest.c", "memtest.expected", NULL},
-    {"logic", "logic.c", "logic.expected", NULL},
+    {"hello", "hello.c", "hello.expected", NULL},
 };
 
 static const char *g_case = NULL;
@@ -92,14 +93,12 @@ static int load_binary(const char *path, unsigned char *buf, int cap) {
 }
 
 static void feed_stdin_input(const char *input) {
-    size_t len;
     if (input == NULL) return;
-    len = strlen(input);
-    for (size_t i = 0; i < len; ++i) {
-        char ch = input[len - 1u - i];
-        if (ungetc((unsigned char)ch, stdin) == EOF) {
-            failf("failed to stage stdin input", NULL);
+    while (*input != '\0') {
+        if (hal_con_push((uint8_t)(unsigned char)*input) != 0) {
+            failf("failed to stage console input", NULL);
         }
+        input++;
     }
 }
 
@@ -107,7 +106,7 @@ static void run_binary_capture(const unsigned char *bin, int bin_len, const char
     cpu_t cpu;
     int out_len = 0;
     int steps;
-    mem_init();
+    mem_init(1u, 65536u);
     bios_init();
     cpu_init(&cpu);
     feed_stdin_input(input);

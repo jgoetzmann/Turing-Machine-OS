@@ -170,6 +170,76 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Decision.** Commit messages carry **no** `Co-Authored-By:`, `Generated-by:`, session links, or any other tool/AI attribution trailer. Subjects are imperative and ≤ 72 characters; the body says *why*. Noisy work-in-progress is squashed into one commit per logical change before it lands on `main`. `make test` must be green for every commit on `main`. Any change to an interface (port, syscall, memory map, file format, HAL, JS API) appends an entry to this file in the same commit.
 
+### B10. The site is a hash-routed single page; docs are Markdown rendered at build time
+
+**Context.** GitHub Pages serves static files from `/Turing-Machine-OS/` with no server-side routing, so `/architecture` would 404 on a direct visit. The docs must stay readable as plain Markdown on GitHub and there must be exactly one copy of them. The stack is Vite + TypeScript with no runtime dependencies.
+
+**Decision.** One `index.html`; every page is a hash route (`#/`, `#/playground`, `#/architecture`, `#/decisions`, `#/demos`, `#/demos/<name>`, `#/languages`, `#/how-it-was-built`, `#/status`). `web/scripts/build-content.mjs` converts `docs/*.md` (slug = file name without `.md`, title = first `# ` heading) and `demos/<name>/README.md` (slug `demos/<name>`) with `marked` into `web/src/generated/content.ts` at build time, and copies `tour.json` and the demo sources into `tours.ts` / `demos.ts`. The playground's whole configuration lives in the hash query (`?demo=…&tapes=…&len=…&hz=…&seed=…&input=…&disks=…&trace=…&speed=…&bp=…`).
+
+**Consequences.** Deep links work with no 404 fallback tricks; a URL fully describes a machine configuration and can be pasted into an issue; no Markdown parser ships to the browser; `docs/` is the single source for the site and for GitHub. The router has to render generated HTML, so the content build runs before `tsc` and `vite build`.
+
+**Alternatives rejected.** History-API routing with a `404.html` redirect (fragile on Pages); fetching `.md` at runtime (a parser in the bundle, and the docs would render differently in two places); a static-site generator (another toolchain for nine pages).
+
+### B11. Time travel is a snapshot ring plus input-log replay
+
+**Context.** The timeline scrubber has to show the machine at an arbitrary earlier step. Storing every step is impossible, and the 8080 has no cheap "undo" per instruction. The machine is already a pure function of its inputs (B2).
+
+**Decision.** A 32-slot ring of full snapshots (all tapes, `cpu_t`, the whole `kernel_t`, BIOS and FS state — not disk images, ages or trace) is taken every `snap_interval` steps. `tos_con_push` and `tos_keys_set` append `{step, kind, value}` to a 4,096-entry input log in `api.c`. `tos_seek(step)` restores the newest slot at or before `step` (returns −1 when there is none) and then runs one instruction at a time, re-applying logged inputs at the steps they originally arrived, until `steps == step` or the machine halts.
+
+**Consequences.** The result is byte-identical to an uninterrupted run (WS1-10) and the same mechanism proves determinism (WS1-16). Seeking costs at most `snap_interval` instructions. No wall-clock value may ever reach the machine — `hal_time_ms` is for the host UI only and `TICKS` counts frames. Input arrival is part of machine history, so the host records *when* a byte was pushed, not just what.
+
+**Alternatives rejected.** Reverse execution with a per-instruction undo log (touches every opcode, huge memory); re-running from boot (linear in step count); a snapshot per step (65 KB × steps).
+
+### B12. Ports 4 and 5 publish the tape count and the tape length
+
+**Context.** With tape count and tape length as levers (B4, B6), a single binary has to discover at run time how many tapes it has and where the top of memory is. The metadata block has this, but the block's own address depends on L.
+
+**Decision.** Two read-only information ports: `IN 04H` returns k; `IN 05H` returns `(L / 256) & 0xFF` (`0x80` = 32K, `0xC0` = 48K, `0x00` = 64K). The kernel refreshes `io_in_ports[2..5]` before every instruction. `OUT` on these ports is ignored.
+
+**Consequences.** The TM and Brainfuck compilers emit code that reads the ports to decide where their tapes go; the shell's `mem` command prints the map for the actual tape; no binary bakes in `0xFF00`. Port reads are ordinary instructions, so they are visible in the trace and cost one step, unlike a syscall.
+
+**Alternatives rejected.** A BIOS call (costs a SYSCALL transition for a constant); a fixed metadata address (contradicts B6); passing the values in registers at load (lost on the first `PUSH`).
+
+### B13. TM tape placement, and `yes`/`no` printed from the halting state
+
+**Context.** A `.tm` program with j TM tapes must run on a machine with k machine tapes (1, 2 or 4) and a window that is 8, 24 or 40 KB depending on L. The palindrome demos need to report a verdict, not just dump a tape.
+
+**Decision.** TM tape j (0-based) lives on machine tape `j mod k` at bank offset `(j div k) × 8192`; the head starts at `+4096`; there is no pre-fill (0 reads as blank). If `(j div k) × 8192 + 8192` exceeds the window, `tm_compile` fails with `line N: too many tapes`. On halt the program prints each tape's visited span trimmed of leading and trailing blanks, then `steps=N`, then `HLT`. A machine that wants to say something prints it *before* the dump from the rule that enters `halt` — the palindrome checkers print `yes` or `no` this way.
+
+**Consequences.** On a 2-tape machine each TM tape gets its own strip in the visualizer, and the 1-tape vs 2-tape palindrome becomes a real measurement of head travel (WS6-05). A 32K machine holds exactly k TM tapes. Output is deterministic and diffable against `tools/tm_ref.py`.
+
+**Alternatives rejected.** Interleaving TM tapes cell by cell on one machine tape (unreadable in the strip view); allocating tape regions at run time (no heap, by A4); printing only the final state name (says nothing to a reader).
+
+### B14. The loader sets SP; no compiler emits `LXI SP`
+
+**Context.** B6 made the top of the stack depend on L. The v1 compiler emitted `LXI SP,0FDFFH` in every program, tying each binary to a 64K tape.
+
+**Decision.** Boot, `RUN` and `tos_load_com` set `SP = TOS_STACK_TOP(L)`, `PC = 0x0100` and the tape selection to 0 before the first instruction. tiny-C, the assembler's output, the TM and Brainfuck compilers never emit `LXI SP`. The value is published at `TOS_META_SP_INIT`. A tiny-C image begins with `CALL main ; HLT`.
+
+**Consequences.** One `.com` runs on 32K, 48K and 64K tapes; the shell and every demo are tested at 32K. A program's `HLT` returns to the shell with a fresh SP. Hand-written assembly *may* set its own SP, but is then non-portable — the docs say so.
+
+**Alternatives rejected.** A relocation header (nothing else needs one); computing SP in every program prologue from `IN 05H` (eight bytes in every binary for something the loader knows).
+
+### B15. Blocking policy: the kernel never blocks; the POSIX HAL blocks only on piped stdin
+
+**Context.** B2 forbids blocking inside the core, which the browser requires. Natively, a scripted run such as `printf 'dir\nhalt\n' | build/turingos` would spin on `KSTOP_WAIT_INPUT` if the HAL merely polled, and tests must never depend on timeouts.
+
+**Decision.** `kernel_step` never sleeps or blocks. `kernel_run` handles `KSTOP_WAIT_INPUT` by asking the HAL; the POSIX `hal_con_in_ready()` does a blocking read when stdin is a pipe or a file (returning 1 for a byte *or* EOF) and polls the raw terminal when stdin is a TTY (`--raw=1`, automatic on a TTY). `--stdin-script=<file>` feeds the file's bytes then EOF. The wasm HAL never blocks: `WAIT_INPUT` returns to JavaScript, which resumes the machine on `conPush`.
+
+**Consequences.** Tests are step-bounded and never spin; `build/turingos </dev/null` halts with `reason=EOF`; there is one kernel loop for both hosts; interactive terminals keep the key bitmask working (keys are held for 150 ms because a TTY has no key-up event). `--raw=1` on a non-TTY is harmless.
+
+**Alternatives rejected.** Threads (unavailable on Pages, unnecessary natively); `select()` with timeouts inside the kernel (blocking in the core); a separate native kernel loop (two kernels).
+
+### B16. Tiny-C v2 scope: 16-bit `int`, unsigned `char`, global arrays only
+
+**Context.** v1's `int` was 8 bits, there were no arrays, no bitwise operators, no `break`/`continue`, `puts` took only literals, and `&&`/`||` used a scratch byte at `0x20FC` inside the TPA. Pong, Life, Forth and a real shell need more; a full C would not fit the 8080's register set or the project's size.
+
+**Decision.** `int` is signed 16-bit, `char` unsigned 8-bit, all arithmetic 16-bit, signed comparisons, logical `>>`, division by zero yields 0. Arrays are global only (`int` 2-byte little-endian, `char` 1-byte), with `__at(A)` for absolute placement and `{…}`/string initialisers. Full operator set including bitwise, shifts, compound assignment, prefix and postfix `++`/`--`; `do/while`, `break`, `continue`, `else if`; recursion; ≤ 4 parameters and ≤ 32 locals on the 8080 stack; intrinsics for the console, memory, ports, BIOS and the shell services. No pointers, structs, `switch`, `?:`, `sizeof`, floats, local arrays or string variables beyond `char[]`. Diagnostics are `src.c:LINE:COL: message`. The fixed scratch address is gone.
+
+**Consequences.** The shell, Pong, Life and Forth fit in the TPA and are written in a language a reader can hold in their head; the code generator stays a straightforward stack machine on HL/DE; the absence of pointers means no aliasing analysis and a compiler of a few thousand lines. Programs that need a buffer declare a global array.
+
+**Alternatives rejected.** Pointers (register pressure on the 8080 and a much larger compiler); local arrays (frame-relative addressing the 8080 does badly — every access would be `LXI H,off ; DAD SP`); keeping 8-bit `int` (cannot address the tape or count past 255).
+
 ---
 
 ## Part C — Pitfalls worth remembering (from the old `remember.md`)
@@ -177,4 +247,51 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 - **8080 flags.** Auxiliary carry is a carry out of bit 3; parity is *even* parity of the result; `DAA` depends on both AC and CY; `PUSH PSW`/`POP PSW` pack flags as `S Z 0 AC 0 P 1 CY` (bit 1 always set, bits 3 and 5 always clear); `CMP` sets flags but must not write `A`. Each has a dedicated test in `tests/emu/`.
 - **Terminal state.** If native raw mode is enabled (WS1-14) it must be restored on `HALT`, on `SIGINT`, and on every error path — a stuck terminal is the classic emulator bug.
 - **Locals on the 8080 stack.** After `CALL`, `SP` points at the return address; the first local lives at `SP+2`, not `SP+0` — the original codegen overwrote the return address.
-- **Logical-op scratch.** The current compiler parks `&&`/`||` intermediates at the fixed address `0x20FC` inside the TPA. Any program whose code crosses that address corrupts itself; WS1-13 removes it.
+- **Logical-op scratch.** The v1 compiler parked `&&`/`||` intermediates at the fixed address `0x20FC` inside the TPA, so any program whose code crossed that address corrupted itself. v2 keeps them in registers and on the stack (WS1-13, B16); do not reintroduce a fixed scratch cell.
+- **A program's `HLT` is not the machine's.** In RUNNING state `HLT` reloads the shell (transition 5); only the shell's own `HLT` halts the machine (`TOS_HALT_COMMAND`). `TOS_HALT_HLT` is reserved and never written.
+
+### B17. Every machine starts with a step-0 anchor snapshot; loading a program adds another
+
+**Context.** The snapshot ring only records a slot every `snap_interval` steps. With the interval set to 0 ("never"), time travel would have nothing to seek to, and even with an interval the first thousand steps of a run could not be revisited.
+
+**Decision.** `kernel_init` always stores an anchor at step 0, and `tos_load_com` stores one at the load point. `tos_seek(step)` restores the nearest earlier slot and replays the input log forward, so any step of a run is reachable; a target beyond the point where the machine parked waiting for input is refused (`-1`) because it cannot be reproduced.
+
+**Consequences.** `tos_snapshot_count()` is 1 on a fresh machine and 2 right after a load. The timeline scrubber can always go back to the start. Replaying from step 0 costs time proportional to the target step, which is why interval snapshots still exist.
+
+### B18. Turing-machine "label states" print their name; silent halts stay silent
+
+**Context.** The palindrome demos need to answer *yes* or *no*. The TM language has no output statement, and adding one would make the machines less textbook.
+
+**Decision.** A state that never appears on the left-hand side of a rule (other than `halt`) is a *label state*. When a rule transitions **into** one, the program prints the state's name and a newline before the tape dump. Running out of matching rules inside a state that has rules, or never leaving the start state, prints nothing. Tape dumps are trimmed of leading and trailing blanks so `1011` incremented prints `1100`, not `1100_`.
+
+**Alternatives rejected.** A `print` directive in rules (not a TM concept); printing the halting state unconditionally (every no-match halt would print a spurious state name).
+
+### B19. Brainfuck programs clear their cells in the prologue
+
+**Context.** BF cells live in the banked window, which is zero at boot but keeps whatever the previous program left. Running `hello.bf` and then `nested.bf` in one session printed garbage because the second program inherited the first one's cells — the classic hello-world assumes zeros.
+
+**Decision.** The compiled prologue zeroes `min(30000, window)` cells before the first command (about 120,000 instructions — you can watch the sweep in the tape map). The TM compiler does not need this: it treats byte 0 as the blank symbol and places each machine's tapes at fixed offsets.
+
+### B20. The native exit line starts on its own line
+
+**Decision.** `build/turingos` prints `TuringOS halted (reason=<NAME>) after <N> steps` on a fresh line unless the halt came from the `halt` command (whose `HALT` line already ended the console output). EOF and faults usually interrupt a prompt, and a line that begins with `A> TuringOS halted…` broke every `tail -1` check.
+
+### B21. Life runs at what an 8080 can do, and the criterion says so
+
+**Context.** The roadmap asked for Game of Life at ≥ 10 generations/s at a virtual 2 MHz. A 64×32 board is 2,048 cells; tiny-C v2 evaluates everything in 16 bits through `HL`, so even the optimised in-place generation (column sums, a running three-column window, a table lookup for B3/S23, no shifts or multiplies) costs about 444,000 instructions — roughly 0.6 generations/s at 2 MHz, dozens per second unthrottled.
+
+**Decision.** The acceptance criterion is now "≤ 500,000 instructions per generation" and is enforced by `tests/kernel/test_v2_ws6_demos_api.c`; `docs/status.md` states the measured number. The alternative — hand-written assembly or a compiler with 8-bit arithmetic and pointer increments — is worth doing but is a different project than "a demo written in the OS's own language".
+
+### B22. Addresses typed into the playground are hexadecimal; addresses in URLs are decimal
+
+**Context.** The breakpoint form is labelled "(hex)" but parsed bare digits as decimal, so `0104` became 104 and the breakpoint never fired. The URL hash, which is machine-written, uses decimal for compactness and unambiguity.
+
+**Decision.** `parseAddress` treats bare digits as hex (`0100`, `100`, `0x100`, `100H`, `$100` all mean `0x0100`; decimal needs a `d` suffix) and every breakpoint kind — address, syscall id, state — goes through it. `formatHash`/`parseHash` keep decimal in the URL and accept `0x` there too.
+
+### B23. Disk images are whole buffers behind the HAL; the metadata block grew
+
+**Context.** The roadmap sketched `hal_disk_read/write(disk, offset, buf, n)`. On the web the disk image is a `Uint8Array` the page owns, and on POSIX it is a file; a sector-level host API would have meant a second cache on the host side.
+
+**Decision.** The filesystem keeps each image in a static 512,512-byte buffer (`fs_image_ptr`). The HAL only loads a whole image at `fs_init` (`hal_disk_load`) and saves it on `fs_flush` (`hal_disk_save`); JavaScript writes straight into the buffer and calls `tos_disk_reload`. Sector I/O (`READ`/`WRITE` via DMA) is entirely inside the machine. The metadata block also gained fields the visualizer needs — `TOS_META_FRAME`, `TOS_META_KEYS`, `TOS_META_STOP`, the lever mirror at `0x30…`, `TOS_META_SYSCALL`, `TOS_META_SP_INIT` — all listed in `src/tos.h` and in the generated constants table.
+
+**Consequences.** Two disks cost 1 MB of static memory (fine natively and in the 64 MB wasm heap). Snapshots deliberately exclude the images, so time travel restores the machine but not files written since the snapshot (`decisions.md` B11).

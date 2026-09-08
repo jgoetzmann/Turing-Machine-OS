@@ -12,7 +12,7 @@ case "$OUT" in
     ;;
 esac
 case "$OUT" in
-  *"TuringOS stub boot complete (state=5)"*) ;;
+  *"TuringOS halted (reason="*) ;;
   *)
     echo "FAIL: expected halt state line in boot output" >&2
     exit 1

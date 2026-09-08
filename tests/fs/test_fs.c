@@ -4,8 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../src/hal/hal.h"
 
-#define TEST_DISK_PATH "build/tests/fs/test_disk.img"
+static int fs_init_path(const char *path) {
+    (void)hal_set_option("disk_a", path);
+    return fs_init(1u);
+}
+
+#define TEST_DISK_PATH "build/tests/fs_test_disk.img"
 #define TRACKS 77u
 #define SECTORS_PER_TRACK 26u
 #define BYTES_PER_SECTOR 256u
@@ -65,7 +71,7 @@ int main(void) {
     uint8_t file_read[700];
     FILE *bad_fp;
     FILE *fp;
-    const char *bad_path = "build/tests/fs/bad_disk.img";
+    const char *bad_path = "build/tests/fs_bad_disk.img";
     int h1;
     int h2;
     int hw;
@@ -75,7 +81,7 @@ int main(void) {
     unsigned int i;
 
     create_blank_disk(TEST_DISK_PATH);
-    if (fs_init(TEST_DISK_PATH) != 0) {
+    if (fs_init_path(TEST_DISK_PATH) != 0) {
         fail("fs_init should accept valid disk geometry");
     }
 
@@ -114,8 +120,12 @@ int main(void) {
     if (fclose(bad_fp) != 0) {
         fail("cannot close bad geometry disk");
     }
-    if (fs_init(bad_path) == 0) {
-        fail("fs_init should reject bad geometry");
+    /* v2: a short or missing image is mounted as a freshly formatted blank disk (SPEC fs.h). */
+    if (fs_init_path(bad_path) != 0) {
+        fail("fs_init should mount a short image as a blank disk");
+    }
+    if (fs_list(names, 8) != 0) {
+        fail("short image should mount as an empty disk");
     }
 
     /* Build a disk with active directory entries and verify fs_open. */
@@ -129,7 +139,7 @@ int main(void) {
     if (fclose(fp) != 0) {
         fail("cannot close directory setup disk");
     }
-    if (fs_init(TEST_DISK_PATH) != 0) {
+    if (fs_init_path(TEST_DISK_PATH) != 0) {
         fail("fs_init should succeed after directory setup");
     }
 
@@ -174,7 +184,7 @@ int main(void) {
     if (fclose(fp) != 0) {
         fail("cannot close disk before write/read test");
     }
-    if (fs_init(TEST_DISK_PATH) != 0) {
+    if (fs_init_path(TEST_DISK_PATH) != 0) {
         fail("fs_init should succeed before fs_write/fs_read test");
     }
     for (i = 0; i < sizeof(file_write); ++i) {
@@ -200,8 +210,9 @@ int main(void) {
     if (memcmp(file_write, file_read, sizeof(file_write)) != 0) {
         fail("fs_read payload mismatch");
     }
-    if (fs_read(hr, file_read, 68) != 68) {
-        fail("fs_read should expose padded tail up to sector boundary");
+    /* v2 tracks exact file lengths: reading past the payload returns 0, not sector padding. */
+    if (fs_read(hr, file_read, 68) != 0) {
+        fail("fs_read past the exact end should return 0");
     }
     if (fs_read(hr, file_read, 1) != 0) {
         fail("fs_read should report EOF once extent is exhausted");

@@ -1,0 +1,7 @@
+[
+  {"panel": "editor", "text": "Pick one of the six sources. cc compiles it to a .com image: CALL main, HLT, then code, then the globals in declaration order."},
+  {"panel": "tapemap", "text": "run loads the image at 0x0100 (the TPA). The bright cells near the top of the tape are the stack; locals and return addresses live there."},
+  {"panel": "fsm", "text": "Every putchar is an OUT 1 with A=2 (CONOUT). Watch RUNNING -> SYSCALL -> RUNNING once per character."},
+  {"panel": "console", "text": "echo.c calls CONIN. With nothing typed the BIOS answers BIOS_WAIT and the kernel parks in IDLE until you press a key."},
+  {"panel": "strip", "text": "In strcat.c and memtest.c the head walks the global arrays byte by byte; in count.c the digits[] buffer fills right-to-left before it is printed."}
+]

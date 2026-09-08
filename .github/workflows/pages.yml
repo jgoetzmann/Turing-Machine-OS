@@ -1,0 +1,54 @@
+# GitHub Pages deploy (SPEC WS8-01): on every push to main build the wasm core + the Vite site
+# and publish web/dist with actions/deploy-pages. Served at
+# https://jgoetzmann.github.io/Turing-Machine-OS/ (vite.config.ts has base: '/Turing-Machine-OS/').
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build (wasm + site)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read the pinned Emscripten version
+        id: emsdk
+        run: echo "version=$(tr -d '[:space:]' < web/emsdk-version.txt)" >> "$GITHUB_OUTPUT"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ steps.emsdk.outputs.version }}
+          actions-cache-folder: emsdk-cache
+      - name: Build the WebAssembly core
+        run: make wasm
+      - name: Build the site (generated json + demo disk + npm ci + vite build)
+        run: make web
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

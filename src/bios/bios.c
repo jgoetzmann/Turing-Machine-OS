@@ -1,548 +1,649 @@
+/* TuringOS v2 — BIOS ("ROM services").
+ *
+ * The 8080 reaches the host only through OUT 0x01 (function id in A) and this file.
+ * Every host interaction goes through the HAL (src/hal/hal.h) or the in-memory
+ * filesystem / compilers; no <stdio.h> here.
+ *
+ * Parking protocol: a service that needs console input and finds none returns
+ * BIOS_WAIT without touching any register and without clearing cpu->io_out_pending,
+ * so the kernel can park in KS_IDLE and call bios_dispatch again with the same cpu.
+ *
+ * All BIOS state lives in one static struct so snapshots can memcpy it (bios_state_*). */
 #include "bios.h"
 
-#include "../compiler/compiler.h"
+#include "../tos.h"
 #include "../emu/mem.h"
 #include "../fs/fs.h"
+#include "../hal/hal.h"
+#include "../compiler/compiler.h"
+#include "../lang/asm.h"
+#include "../lang/tm.h"
+#include "../lang/bf.h"
 
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
-#define BIOS_OUT_CAPACITY 1024
-#define BIOS_SECTOR_SIZE 256u
+#define BIOS_OUT_CAP   4096u
+#define BIOS_NAME_CAP  64u
+#define BIOS_LINE_CAP  128u
+#define BIOS_SRC_CAP   32768u
+#define BIOS_COM_CAP   16384u
+#define BIOS_SECTOR    256u
+#define BIOS_ERR_CAP   256u
 
-static char g_out[BIOS_OUT_CAPACITY];
-static unsigned int g_head = 0;
-static unsigned int g_tail = 0;
-static uint8_t g_disk = 0u;
-static uint8_t g_track = 0u;
-static uint8_t g_sector = 1u;
-static uint16_t g_dma = 0x0080u;
+typedef struct {
+    uint8_t  out[BIOS_OUT_CAP];       /* console output ring */
+    uint32_t out_head;
+    uint32_t out_tail;
+    uint32_t out_count;
+    uint8_t  disk;                    /* SELDISK */
+    uint8_t  track;                   /* SETTRK */
+    uint8_t  sector;                  /* SETSEC (1-based) */
+    uint16_t dma;                     /* SETDMA */
+    uint32_t tape_len;                /* L, for DMA bounds */
+    char     name[BIOS_NAME_CAP];     /* NAMECH accumulator */
+    uint32_t name_len;
+    uint8_t  run_pending;             /* 1 once after a successful RUN */
+    char     line[BIOS_LINE_CAP];     /* READLINE buffer */
+    uint32_t line_len;
+    uint8_t  line_active;             /* a READLINE is in progress (parked) */
+    uint8_t  seed;
+    uint8_t  rng;                     /* xorshift state */
+    uint32_t ticks;                   /* frames completed */
+    uint8_t  last_fn;
+} bios_state_t;
 
-static char g_type_name[256];
-static unsigned int g_type_len = 0u;
-static int g_run_loaded = 0;
+static bios_state_t S;
 
-static char g_shell_line[128];
-static unsigned int g_shell_line_len = 0u;
+/* Transient scratch for the compilers and RUN — not part of the snapshot state. */
+static uint8_t g_src[BIOS_SRC_CAP + 1u];
+static uint8_t g_com[BIOS_COM_CAP];
+static char    g_err[BIOS_ERR_CAP];
 
-#define BIOS_TPA_LOAD 0x0100u
-#define BIOS_TPA_END 0x3FFFu
+/* ---- output ring ------------------------------------------------------- */
 
-#define CC_STAGE_SRC "build/turingos_cc_src.c"
-#define CC_STAGE_OUT "build/turingos_cc_out.com"
-
-static unsigned int next_index(unsigned int idx) {
-    return (idx + 1u) % BIOS_OUT_CAPACITY;
-}
-
-static int out_queue_push(char ch) {
-    unsigned int next = next_index(g_head);
-    if (next == g_tail) {
-        return 0;
+static void out_byte(uint8_t ch) {
+    if (S.out_count >= BIOS_OUT_CAP) {
+        /* Ring full (a long TYPE/LISTDIR inside one syscall): hand the oldest byte to the
+         * host now so nothing is lost and ordering holds; the kernel drains the rest later. */
+        hal_con_out(S.out[S.out_tail]);
+        S.out_tail = (S.out_tail + 1u) % BIOS_OUT_CAP;
+        S.out_count--;
     }
-    g_out[g_head] = ch;
-    g_head = next;
-    return 1;
+    S.out[S.out_head] = ch;
+    S.out_head = (S.out_head + 1u) % BIOS_OUT_CAP;
+    S.out_count++;
 }
 
-static void bios_readline(cpu_t *cpu) {
-    int ch;
-    unsigned int len = 0u;
+static void out_str(const char *s) {
+    while (*s != '\0') {
+        out_byte((uint8_t)*s);
+        s++;
+    }
+}
 
-    g_shell_line_len = 0u;
-    g_shell_line[0] = '\0';
-    while (1) {
-        ch = getchar();
-        if (ch == EOF) {
-            /* Closed stdin (e.g. turingos </dev/null>): stop the shell loop. */
-            cpu->halted = 1;
-            return;
+static void out_bad(void) {
+    out_str("?\n");
+}
+
+/* ---- name buffer helpers ----------------------------------------------- */
+
+/* Copy the accumulated name out (NUL-terminated) and clear the accumulator. */
+static void name_take(char *dst, uint32_t cap) {
+    uint32_t n = S.name_len;
+    if (n >= cap) {
+        n = cap - 1u;
+    }
+    memcpy(dst, S.name, n);
+    dst[n] = '\0';
+    S.name_len = 0u;
+    S.name[0] = '\0';
+}
+
+/* Split "BASE.EXT" -> base; returns 1 when an extension was present. */
+static int name_base(const char *name, char *base, uint32_t cap) {
+    uint32_t i = 0u;
+    int has_ext = 0;
+    while (name[i] != '\0' && name[i] != '.' && i + 1u < cap) {
+        base[i] = name[i];
+        i++;
+    }
+    base[i] = '\0';
+    if (name[i] == '.') {
+        has_ext = 1;
+    }
+    return has_ext;
+}
+
+static void name_join(char *dst, uint32_t cap, const char *base, const char *ext) {
+    uint32_t n = 0u;
+    uint32_t i;
+    for (i = 0u; base[i] != '\0' && n + 1u < cap; i++) {
+        dst[n++] = base[i];
+    }
+    if (n + 1u < cap) {
+        dst[n++] = '.';
+    }
+    for (i = 0u; ext[i] != '\0' && n + 1u < cap; i++) {
+        dst[n++] = ext[i];
+    }
+    dst[n] = '\0';
+}
+
+/* ---- individual services ----------------------------------------------- */
+
+static int svc_conin(cpu_t *cpu) {
+    int ch = hal_con_in();
+    if (ch == -1) {
+        return BIOS_WAIT;               /* registers and io_out_pending untouched */
+    }
+    if (ch == -2) {
+        cpu->a = 0u;
+        return BIOS_EOF;
+    }
+    cpu->a = (uint8_t)ch;
+    return BIOS_DONE;
+}
+
+static int svc_readline(void) {
+    if (!S.line_active) {
+        S.line_active = 1u;
+        S.line_len = 0u;
+        S.line[0] = '\0';
+    }
+    for (;;) {
+        int ch = hal_con_in();
+        if (ch == -1) {
+            return BIOS_WAIT;           /* partial line stays in S.line; resume on the next dispatch */
+        }
+        if (ch == -2) {
+            if (S.line_len > 0u) {
+                /* EOF right after a partial line: deliver the line now, EOF on the next call. */
+                S.line_active = 0u;
+                break;
+            }
+            S.line_active = 0u;
+            return BIOS_EOF;
+        }
+        if (ch == '\n' || ch == '\r') {
+            S.line_active = 0u;
+            break;
         }
         if (ch == 8 || ch == 127) {
-            if (len > 0u) {
-                len--;
-                (void)out_queue_push((char)8);
-                (void)out_queue_push(' ');
-                (void)out_queue_push((char)8);
+            if (S.line_len > 0u) {
+                S.line_len--;
             }
             continue;
         }
-        if (ch == 10 || ch == 13) {
-            break;
-        }
-        if (len < 128u) {
-            g_shell_line[len] = (char)ch;
-            len++;
+        if (S.line_len < BIOS_LINE_CAP) {
+            S.line[S.line_len++] = (char)ch;
         }
     }
-    g_shell_line_len = len;
-    if (len < 128u) {
-        g_shell_line[len] = '\0';
+    if (S.line_len < BIOS_LINE_CAP) {
+        S.line[S.line_len] = '\0';
+    }
+    return BIOS_DONE;
+}
+
+static void svc_lineget(cpu_t *cpu) {
+    uint32_t idx = cpu->c;
+    if (idx < S.line_len && idx < BIOS_LINE_CAP) {
+        cpu->a = (uint8_t)S.line[idx];
     } else {
-        g_shell_line[127] = '\0';
+        cpu->a = 0u;
     }
 }
 
-static void bios_lineget(cpu_t *cpu) {
-    unsigned int idx = (unsigned int)cpu->c;
-    if (idx >= g_shell_line_len || idx >= 128u) {
+static void svc_linelen(cpu_t *cpu) {
+    cpu->a = (S.line_len > 255u) ? 255u : (uint8_t)S.line_len;
+}
+
+static void svc_seldisk(cpu_t *cpu) {
+    if (fs_select_disk(cpu->c) == 0) {
+        S.disk = cpu->c;
         cpu->a = 0u;
     } else {
-        cpu->a = (uint8_t)(unsigned char)g_shell_line[idx];
+        cpu->a = 1u;
     }
 }
 
-static void bios_linelen(cpu_t *cpu) {
-    cpu->a = (g_shell_line_len > 255u) ? 255u : (uint8_t)g_shell_line_len;
-}
-
-static void bios_conin(cpu_t *cpu) {
-    int ch = getchar();
-    cpu->a = (ch == EOF) ? 0u : (uint8_t)ch;
-}
-
-static void bios_conout(cpu_t *cpu) {
-    (void)out_queue_push((char)cpu->c);
-}
-
-static void bios_seldisk(cpu_t *cpu) {
-    g_disk = cpu->c;
-}
-
-static void bios_settrk(cpu_t *cpu) {
-    g_track = cpu->c;
-}
-
-static void bios_setsec(cpu_t *cpu) {
-    g_sector = cpu->c;
-}
-
-static void bios_setdma(cpu_t *cpu) {
-    g_dma = (uint16_t)(((uint16_t)cpu->d << 8) | cpu->e);
-}
-
-static void bios_read(cpu_t *cpu) {
-    uint8_t *mem = mem_raw();
-    int rc;
-    if ((uint32_t)g_dma + BIOS_SECTOR_SIZE > 65536u) {
+static void svc_read(cpu_t *cpu) {
+    uint8_t buf[BIOS_SECTOR];
+    uint32_t i;
+    if ((uint32_t)S.dma + BIOS_SECTOR > S.tape_len) {
         cpu->a = 1u;
         return;
     }
-    rc = fs_read_sector(g_track, g_sector, &mem[g_dma]);
-    cpu->a = (rc == 0) ? 0u : 1u;
-}
-
-static void bios_write(cpu_t *cpu) {
-    uint8_t *mem = mem_raw();
-    int rc;
-    if ((uint32_t)g_dma + BIOS_SECTOR_SIZE > 65536u) {
+    if (fs_read_sector(S.track, S.sector, buf) != 0) {
         cpu->a = 1u;
         return;
     }
-    rc = fs_write_sector(g_track, g_sector, &mem[g_dma]);
-    cpu->a = (rc == 0) ? 0u : 1u;
+    for (i = 0u; i < BIOS_SECTOR; i++) {
+        mem_write((addr_t)((uint32_t)S.dma + i), buf[i]);
+    }
+    cpu->a = 0u;
 }
 
-static void bios_namech(cpu_t *cpu) {
-    if (g_type_len < sizeof(g_type_name) - 1u) {
-        g_type_name[g_type_len++] = (char)cpu->c;
+static void svc_write(cpu_t *cpu) {
+    uint8_t buf[BIOS_SECTOR];
+    uint32_t i;
+    if ((uint32_t)S.dma + BIOS_SECTOR > S.tape_len) {
+        cpu->a = 1u;
+        return;
+    }
+    for (i = 0u; i < BIOS_SECTOR; i++) {
+        buf[i] = mem_read((addr_t)((uint32_t)S.dma + i));
+    }
+    if (fs_write_sector(S.track, S.sector, buf) != 0) {
+        cpu->a = 1u;
+        return;
+    }
+    cpu->a = 0u;
+}
+
+static void svc_listdir(void) {
+    char names[TOS_DISK_DIR_ENTRIES][13];
+    int n;
+    int i;
+    int j;
+    n = fs_list(names, (int)TOS_DISK_DIR_ENTRIES);
+    if (n < 0) {
+        out_bad();
+        return;
+    }
+    if (n == 0) {
+        out_str("(empty)\n");
+        return;
+    }
+    for (i = 0; i < n; i++) {
+        for (j = 0; j < 12 && names[i][j] != '\0'; j++) {
+            out_byte((uint8_t)names[i][j]);
+        }
+        out_byte((uint8_t)'\n');
     }
 }
 
-static void bios_runfile(cpu_t *cpu) {
-    uint8_t buf[256];
+static void svc_namech(cpu_t *cpu) {
+    if (S.name_len + 1u < BIOS_NAME_CAP) {
+        S.name[S.name_len++] = (char)cpu->c;
+        S.name[S.name_len] = '\0';
+    }
+}
+
+static void svc_type(void) {
+    char name[BIOS_NAME_CAP];
+    uint8_t buf[BIOS_SECTOR];
     int fh;
     int r;
-    unsigned int i;
-    addr_t addr;
-
-    g_type_name[g_type_len] = '\0';
-    g_type_len = 0u;
-    if (g_type_name[0] == '\0') {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+    int i;
+    name_take(name, sizeof name);
+    if (name[0] == '\0') {
+        out_bad();
         return;
     }
-    fh = fs_open(g_type_name);
+    fh = fs_open(name);
     if (fh < 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+        out_bad();
         return;
     }
-    addr = BIOS_TPA_LOAD;
     for (;;) {
-        r = fs_read(fh, buf, (int)sizeof(buf));
+        r = fs_read(fh, buf, (int)sizeof buf);
         if (r <= 0) {
             break;
         }
-        for (i = 0u; i < (unsigned int)r; i++) {
-            if (addr > BIOS_TPA_END) {
-                fs_close(fh);
-                (void)out_queue_push('?');
-                (void)out_queue_push('\n');
-                return;
-            }
-            mem_write(addr, buf[i]);
-            addr++;
+        for (i = 0; i < r; i++) {
+            out_byte(buf[i]);
         }
     }
     fs_close(fh);
-    cpu->pc = BIOS_TPA_LOAD;
+    out_byte((uint8_t)'\n');
+}
+
+static void svc_run(cpu_t *cpu) {
+    char raw[BIOS_NAME_CAP];
+    char base[BIOS_NAME_CAP];
+    char name[BIOS_NAME_CAP + 8u];
+    int size;
+    int n;
+    int i;
+    name_take(raw, sizeof raw);
+    if (raw[0] == '\0') {
+        out_bad();
+        return;
+    }
+    if (name_base(raw, base, sizeof base)) {
+        memcpy(name, raw, sizeof raw);
+    } else {
+        name_join(name, sizeof name, base, "COM");
+    }
+    size = fs_file_size(name);
+    if (size < 0 || (uint32_t)size > TOS_TPA_SIZE) {
+        out_bad();
+        return;
+    }
+    n = fs_get_file(name, g_com, BIOS_COM_CAP);
+    if (n < 0 || (uint32_t)n > TOS_TPA_SIZE) {
+        out_bad();
+        return;
+    }
+    (void)mem_select_tape(0u);          /* RUN resets the tape selection */
+    for (i = 0; i < n; i++) {
+        mem_poke(0u, (addr_t)(TOS_TPA_BASE + (uint32_t)i), g_com[i]);
+    }
+    cpu->pc = (uint16_t)TOS_TPA_BASE;
     cpu->halted = 0;
-    g_run_loaded = 1;
+    S.run_pending = 1u;
 }
 
-static void bios_deletefile(cpu_t *cpu) {
-    (void)cpu;
-    g_type_name[g_type_len] = '\0';
-    g_type_len = 0u;
-    if (g_type_name[0] == '\0') {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+static void svc_del(void) {
+    char name[BIOS_NAME_CAP];
+    name_take(name, sizeof name);
+    if (name[0] == '\0') {
+        out_bad();
         return;
     }
-    if (fs_delete(g_type_name) != 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+    if (fs_delete(name) != 0) {
+        out_bad();
     }
 }
 
-static int bios_derive_com_name(const char *src, char *out, size_t out_cap) {
-    size_t n = strlen(src);
-    if (n < 3u || n + 6u > out_cap) {
-        return -1;
-    }
-    if (src[n - 2u] != '.' || (src[n - 1u] != 'c' && src[n - 1u] != 'C')) {
-        return -1;
-    }
-    (void)memcpy(out, src, n - 2u);
-    out[n - 2u] = '\0';
-    if (strlen(out) + 5u > out_cap) {
-        return -1;
-    }
-    (void)strcat(out, ".com");
-    return 0;
-}
+/* lang: TOS_LANG_C / TOS_LANG_ASM / TOS_LANG_TM / TOS_LANG_BF */
+static void svc_compile(int lang) {
+    char raw[BIOS_NAME_CAP];
+    char base[BIOS_NAME_CAP];
+    char src_name[BIOS_NAME_CAP + 8u];
+    char com_name[BIOS_NAME_CAP + 8u];
+    const char *ext;
+    int size;
+    int n;
+    int len;
 
-static void bios_cccompile(cpu_t *cpu) {
-    char src_name[256];
-    char out_name[256];
-    uint8_t src_buf[16384];
-    uint8_t out_buf[16384];
-    int fh;
-    int nread;
-    int chunk;
-    FILE *wfp;
-    FILE *rfp;
-    long out_sz;
-    int wh;
-    int w;
+    name_take(raw, sizeof raw);
+    if (raw[0] == '\0') {
+        out_bad();
+        return;
+    }
+    if (lang == TOS_LANG_ASM) {
+        ext = "ASM";
+    } else if (lang == TOS_LANG_TM) {
+        ext = "TM";
+    } else if (lang == TOS_LANG_BF) {
+        ext = "BF";
+    } else {
+        ext = "C";
+    }
+    if (name_base(raw, base, sizeof base)) {
+        memcpy(src_name, raw, sizeof raw);
+    } else {
+        name_join(src_name, sizeof src_name, base, ext);
+    }
+    name_join(com_name, sizeof com_name, base, "COM");
 
-    (void)cpu;
-    g_type_name[g_type_len] = '\0';
-    g_type_len = 0u;
-    if (g_type_name[0] == '\0') {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+    size = fs_file_size(src_name);
+    if (size < 0 || (uint32_t)size > BIOS_SRC_CAP) {
+        out_bad();
         return;
     }
-    if (strlen(g_type_name) >= sizeof(src_name)) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+    n = fs_get_file(src_name, g_src, BIOS_SRC_CAP);
+    if (n < 0 || (uint32_t)n > BIOS_SRC_CAP) {
+        out_bad();
         return;
     }
-    (void)strcpy(src_name, g_type_name);
-    if (bios_derive_com_name(src_name, out_name, sizeof(out_name)) != 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
+    g_src[n] = 0u;
+    g_err[0] = '\0';
+
+    if (lang == TOS_LANG_ASM) {
+        len = asm_assemble((const char *)g_src, (uint32_t)n, g_com, TOS_TPA_SIZE, g_err, BIOS_ERR_CAP);
+    } else if (lang == TOS_LANG_TM) {
+        len = tm_compile((const char *)g_src, (uint32_t)n, g_com, TOS_TPA_SIZE, g_err, BIOS_ERR_CAP);
+    } else if (lang == TOS_LANG_BF) {
+        len = bf_compile((const char *)g_src, (uint32_t)n, g_com, TOS_TPA_SIZE, g_err, BIOS_ERR_CAP);
+    } else {
+        len = cc_compile_buf((const char *)g_src, (uint32_t)n, g_com, TOS_TPA_SIZE, g_err, BIOS_ERR_CAP);
     }
-    fh = fs_open(src_name);
-    if (fh < 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    nread = 0;
-    for (;;) {
-        chunk = fs_read(fh, src_buf + nread, (int)sizeof(src_buf) - 1 - nread);
-        if (chunk < 0) {
-            fs_close(fh);
-            (void)out_queue_push('?');
-            (void)out_queue_push('\n');
-            return;
+    if (len < 0) {
+        g_err[BIOS_ERR_CAP - 1u] = '\0';
+        if (g_err[0] == '\0') {
+            out_str("?");
+        } else if (memcmp(g_err, "src.c:", 6u) == 0) {
+            out_str(src_name);          /* "src.c:L:C: msg" -> "PONG.C:L:C: msg" */
+            out_str(g_err + 5);
+        } else {
+            out_str(g_err);
         }
-        if (chunk == 0) {
-            break;
-        }
-        nread += chunk;
-        if (nread >= (int)sizeof(src_buf) - 1) {
-            fs_close(fh);
-            (void)out_queue_push('?');
-            (void)out_queue_push('\n');
-            return;
-        }
-    }
-    fs_close(fh);
-    src_buf[nread] = 0u;
-
-    (void)remove(CC_STAGE_SRC);
-    (void)remove(CC_STAGE_OUT);
-    wfp = fopen(CC_STAGE_SRC, "wb");
-    if (wfp == NULL) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+        out_byte((uint8_t)'\n');
         return;
     }
-    if (fwrite(src_buf, 1u, (size_t)nread, wfp) != (size_t)nread) {
-        (void)fclose(wfp);
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    if (fclose(wfp) != 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-
-    if (cc_compile(CC_STAGE_SRC, CC_STAGE_OUT) != 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-
-    rfp = fopen(CC_STAGE_OUT, "rb");
-    if (rfp == NULL) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    if (fseek(rfp, 0L, SEEK_END) != 0) {
-        (void)fclose(rfp);
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    out_sz = ftell(rfp);
-    if (out_sz < 0L || out_sz > (long)sizeof(out_buf)) {
-        (void)fclose(rfp);
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    if (fseek(rfp, 0L, SEEK_SET) != 0) {
-        (void)fclose(rfp);
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    if (fread(out_buf, 1u, (size_t)out_sz, rfp) != (size_t)out_sz) {
-        (void)fclose(rfp);
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    if (fclose(rfp) != 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-
-    if (fs_exists(out_name)) {
-        if (fs_delete(out_name) != 0) {
-            (void)out_queue_push('?');
-            (void)out_queue_push('\n');
-            return;
-        }
-    }
-    wh = fs_create(out_name);
-    if (wh < 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    w = fs_write(wh, out_buf, (int)out_sz);
-    fs_close(wh);
-    if (w != (int)out_sz) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
+    if (fs_put_file(com_name, g_com, (uint32_t)len) != 0) {
+        out_bad();
         return;
     }
     fs_flush();
 }
 
-static void bios_typefile(cpu_t *cpu) {
-    uint8_t buf[256];
-    int fh;
-    int r;
-    unsigned int i;
-
-    (void)cpu;
-    g_type_name[g_type_len] = '\0';
-    g_type_len = 0u;
-    if (g_type_name[0] == '\0') {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    fh = fs_open(g_type_name);
-    if (fh < 0) {
-        (void)out_queue_push('?');
-        (void)out_queue_push('\n');
-        return;
-    }
-    for (;;) {
-        r = fs_read(fh, buf, (int)sizeof(buf));
-        if (r <= 0) {
-            break;
-        }
-        for (i = 0u; i < (unsigned int)r; i++) {
-            (void)out_queue_push((char)buf[i]);
-        }
-    }
-    fs_close(fh);
-    (void)out_queue_push('\n');
-}
+/* ---- public API -------------------------------------------------------- */
 
 void bios_init(void) {
-    g_head = 0;
-    g_tail = 0;
-    g_disk = 0u;
-    g_track = 0u;
-    g_sector = 1u;
-    g_dma = 0x0080u;
-    g_type_len = 0u;
-    g_type_name[0] = '\0';
-    g_run_loaded = 0;
-    g_shell_line_len = 0u;
-    g_shell_line[0] = '\0';
+    memset(&S, 0, sizeof S);
+    S.sector = 1u;
+    S.tape_len = TOS_TAPE_LEN_64K;
+    S.dma = (uint16_t)TOS_DMA_DEFAULT(TOS_TAPE_LEN_64K);
+    S.seed = 1u;
+    S.rng = 1u;
 }
 
-void bios_dispatch(cpu_t *cpu) {
-    if (cpu == NULL) {
-        return;
+void bios_reset(void) {
+    uint32_t tape_len = S.tape_len;
+    uint8_t seed = S.seed;
+    bios_init();
+    bios_set_tape_len(tape_len);
+    bios_set_seed(seed);
+}
+
+void bios_set_tape_len(uint32_t tape_len) {
+    if (tape_len != TOS_TAPE_LEN_32K && tape_len != TOS_TAPE_LEN_48K && tape_len != TOS_TAPE_LEN_64K) {
+        tape_len = TOS_TAPE_LEN_64K;
     }
+    S.tape_len = tape_len;
+    S.dma = (uint16_t)TOS_DMA_DEFAULT(tape_len);
+}
 
-    g_run_loaded = 0;
+void bios_set_seed(uint8_t seed) {
+    if (seed == 0u) {
+        seed = 1u;                      /* seed 0 behaves as seed 1 */
+    }
+    S.seed = seed;
+    S.rng = seed;
+}
 
-    switch (cpu->a) {
-        case 0x01u: /* CONIN */
-            bios_conin(cpu);
-            break;
-        case 0x02u: /* CONOUT */
-            bios_conout(cpu);
-            break;
-        case 0x03u: /* AUXOUT (stub) */
-        case 0x04u: /* AUXIN (stub) */
-            break;
-        case 0x09u: /* SELDISK */
-            bios_seldisk(cpu);
-            break;
-        case 0x0Au: /* SETTRK */
-            bios_settrk(cpu);
-            break;
-        case 0x0Bu: /* SETSEC */
-            bios_setsec(cpu);
-            break;
-        case 0x0Cu: /* SETDMA */
-            bios_setdma(cpu);
-            break;
-        case 0x0Du: /* READ */
-            bios_read(cpu);
-            break;
-        case 0x0Eu: /* WRITE */
-            bios_write(cpu);
-            break;
-        case 0x12u: /* TYPE name byte — append to filename buffer */
-            bios_namech(cpu);
-            break;
-        case 0x13u: /* TYPE end — open file, print contents, clear buffer */
-            bios_typefile(cpu);
-            break;
-        case 0x14u: /* RUN end — load .com into TPA, transfer control */
-            bios_runfile(cpu);
-            break;
-        case 0x15u: /* DEL end — delete file by buffered name */
-            bios_deletefile(cpu);
-            break;
-        case 0x16u: /* CC end — host compile .c from disk to .com on disk */
-            bios_cccompile(cpu);
-            break;
-        case 0x17u: /* READLINE — fill g_shell_line from stdin (backspace ok) */
-            bios_readline(cpu);
-            break;
-        case 0x18u: /* LINEGET — byte g_shell_line[C] into A */
-            bios_lineget(cpu);
-            break;
-        case 0x19u: /* LINELEN — line length into A */
-            bios_linelen(cpu);
-            break;
-        case 0x0Fu: { /* LISTDIR — print directory to console (host fs_list) */
-            char names[64][13];
-            int n;
-            unsigned int i;
-            int j;
-            n = fs_list(names, 64);
-            if (n < 0) {
-                (void)out_queue_push('?');
-                (void)out_queue_push('\n');
-                break;
-            }
-            if (n == 0) {
-                const char *msg = "(empty)\n";
-                while (*msg != '\0') {
-                    (void)out_queue_push(*msg);
-                    msg++;
-                }
-                break;
-            }
-            for (i = 0u; (int)i < n; i++) {
-                for (j = 0; names[i][j] != '\0' && j < 13; j++) {
-                    (void)out_queue_push(names[i][j]);
-                }
-                (void)out_queue_push('\n');
+int bios_dispatch(cpu_t *cpu) {
+    int r = BIOS_DONE;
+    uint8_t fn;
+
+    if (cpu == NULL) {
+        return BIOS_DONE;
+    }
+    fn = cpu->io_out_value;
+    S.last_fn = fn;
+
+    switch (fn) {
+        case TOS_BIOS_CONIN:
+            r = svc_conin(cpu);
+            if (r == BIOS_WAIT) {
+                return BIOS_WAIT;       /* io_out_pending stays set for the retry */
             }
             break;
-        }
+        case TOS_BIOS_CONOUT:
+            out_byte(cpu->c);
+            break;
+        case TOS_BIOS_AUXOUT:
+            break;
+        case TOS_BIOS_AUXIN:
+            cpu->a = 0u;
+            break;
+        case TOS_BIOS_CONST:
+            cpu->a = hal_con_in_ready() ? 0xFFu : 0u;
+            break;
+        case TOS_BIOS_VSYNC:
+            r = BIOS_VSYNC;
+            break;
+        case TOS_BIOS_RAND:
+            cpu->a = bios_rand();
+            break;
+        case TOS_BIOS_TICKS:
+            cpu->a = (uint8_t)(S.ticks & 0xFFu);
+            break;
+        case TOS_BIOS_SELDISK:
+            svc_seldisk(cpu);
+            break;
+        case TOS_BIOS_SETTRK:
+            S.track = cpu->c;
+            break;
+        case TOS_BIOS_SETSEC:
+            S.sector = cpu->c;
+            break;
+        case TOS_BIOS_SETDMA:
+            S.dma = (uint16_t)(((uint16_t)cpu->d << 8) | cpu->e);
+            break;
+        case TOS_BIOS_READ:
+            svc_read(cpu);
+            break;
+        case TOS_BIOS_WRITE:
+            svc_write(cpu);
+            break;
+        case TOS_BIOS_LISTDIR:
+            svc_listdir();
+            break;
+        case TOS_BIOS_NAMECH:
+            svc_namech(cpu);
+            break;
+        case TOS_BIOS_TYPE:
+            svc_type();
+            break;
+        case TOS_BIOS_RUN:
+            svc_run(cpu);
+            break;
+        case TOS_BIOS_DEL:
+            svc_del();
+            break;
+        case TOS_BIOS_CC:
+            svc_compile(TOS_LANG_C);
+            break;
+        case TOS_BIOS_READLINE:
+            r = svc_readline();
+            if (r == BIOS_WAIT) {
+                return BIOS_WAIT;
+            }
+            break;
+        case TOS_BIOS_LINEGET:
+            svc_lineget(cpu);
+            break;
+        case TOS_BIOS_LINELEN:
+            svc_linelen(cpu);
+            break;
+        case TOS_BIOS_ASM:
+            svc_compile(TOS_LANG_ASM);
+            break;
+        case TOS_BIOS_TM:
+            svc_compile(TOS_LANG_TM);
+            break;
+        case TOS_BIOS_BF:
+            svc_compile(TOS_LANG_BF);
+            break;
         default:
-            break;
+            break;                      /* unknown function id: ignored */
     }
 
     cpu->io_out_pending = 0u;
+    return r;
 }
 
 int bios_run_program_pending(void) {
-    return g_run_loaded;
+    int r = S.run_pending ? 1 : 0;
+    S.run_pending = 0u;
+    return r;
 }
 
 int bios_pending_output(void) {
-    return g_head != g_tail;
+    return (int)S.out_count;
 }
 
 char bios_get_output(void) {
     char ch = '\0';
-    if (g_head != g_tail) {
-        ch = g_out[g_tail];
-        g_tail = (g_tail + 1u) % BIOS_OUT_CAPACITY;
+    if (S.out_count > 0u) {
+        ch = (char)S.out[S.out_tail];
+        S.out_tail = (S.out_tail + 1u) % BIOS_OUT_CAP;
+        S.out_count--;
     }
     return ch;
 }
 
 uint8_t bios_current_disk(void) {
-    return g_disk;
+    return S.disk;
 }
 
 uint8_t bios_current_track(void) {
-    return g_track;
+    return S.track;
 }
 
 uint8_t bios_current_sector(void) {
-    return g_sector;
+    return S.sector;
 }
 
 uint16_t bios_dma_addr(void) {
-    return g_dma;
+    return S.dma;
+}
+
+uint8_t bios_rand(void) {
+    uint8_t x = S.rng;
+    if (x == 0u) {
+        x = 1u;
+    }
+    x ^= (uint8_t)(x << 3);
+    x ^= (uint8_t)(x >> 5);
+    x ^= (uint8_t)(x << 1);
+    S.rng = x;
+    return x;
+}
+
+uint32_t bios_ticks(void) {
+    return S.ticks;
+}
+
+void bios_tick(void) {
+    S.ticks++;
+}
+
+uint8_t bios_last_fn(void) {
+    return S.last_fn;
+}
+
+uint32_t bios_state_size(void) {
+    return (uint32_t)sizeof S;
+}
+
+void bios_state_save(uint8_t *buf) {
+    if (buf != NULL) {
+        memcpy(buf, &S, sizeof S);
+    }
+}
+
+void bios_state_load(const uint8_t *buf) {
+    if (buf != NULL) {
+        memcpy(&S, buf, sizeof S);
+        if (S.out_head >= BIOS_OUT_CAP || S.out_tail >= BIOS_OUT_CAP || S.out_count > BIOS_OUT_CAP) {
+            S.out_head = 0u;
+            S.out_tail = 0u;
+            S.out_count = 0u;
+        }
+        if (S.name_len >= BIOS_NAME_CAP) {
+            S.name_len = 0u;
+        }
+        if (S.line_len > BIOS_LINE_CAP) {
+            S.line_len = 0u;
+        }
+        if (S.tape_len != TOS_TAPE_LEN_32K && S.tape_len != TOS_TAPE_LEN_48K && S.tape_len != TOS_TAPE_LEN_64K) {
+            S.tape_len = TOS_TAPE_LEN_64K;
+        }
+    }
 }

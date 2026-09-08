@@ -1,0 +1,8 @@
+[
+  {"panel": "console", "text": "A Forth REPL. The interpreter says `ok` as soon as it starts. Type `: sq dup * ;` and press Enter; it answers `ok` again. Then `7 sq .` prints `49 ` in front of the next `ok`. `bye` returns to the shell."},
+  {"panel": "tapemap", "text": "Everything Forth owns lives in the bank window of tape 0: data stack at 0x4000, return stack at 0x4080, dictionary from 0x4100, names at 0x4400, threaded code from 0x4800. Nothing above 0x5900 is touched unless you store there with `!`."},
+  {"panel": "strip", "text": "Define a word and watch cells appear at 0x4800. A cell below 100 is a primitive id; a cell of 100 or more calls the word whose body starts at that offset minus 100."},
+  {"panel": "fsm", "text": "Every keystroke arrives through the CONIN syscall. When nothing is queued the machine parks in IDLE and wakes on the next byte you type; the prompt is written through CONOUT."},
+  {"panel": "stats", "text": "Compare head travel for `words`, which walks the whole name table, with `dup`, which touches two stack cells next to each other."},
+  {"panel": "editor", "text": "To extend the language, add a name to the boot string in forth.c and a matching branch in prim(), then recompile from this editor and run it again."}
+]

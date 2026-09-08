@@ -1,7 +1,7 @@
 /* tests/emu/test_v2_mem.c
  * Spec-derived tests for the tape module (src/emu/mem.h).
  * Behaviors: WS1-03, WS4-01a, WS4-01b, WS4-02a, WS4-08.
- * Written from .fullsend/SPEC.md only; no implementation was consulted.
+ * Written from the v2 specification only; no implementation was consulted.
  */
 #include "../testfw.h"
 #include "emu/mem.h"

@@ -1,7 +1,7 @@
 /* tests/emu/test_v2_cpu.c
  * Spec-derived tests for the Intel 8080 core (src/emu/cpu.h).
  * Behaviors: WS1-04 (cycle table), WS1-05 (opcode lengths and undocumented aliases).
- * Written from .fullsend/SPEC.md only; no implementation was consulted.
+ * Written from the v2 specification only; no implementation was consulted.
  * Every machine run below is a bounded number of explicit cpu_step calls.
  */
 #include "../testfw.h"

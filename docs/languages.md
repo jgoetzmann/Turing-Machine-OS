@@ -23,7 +23,7 @@ In the shell, a compile command reads `NAME.EXT` from the selected disk, writes 
 
 ## tiny-C
 
-The workhorse: 16-bit `int`, unsigned `char`, global arrays, the full C operator set, `if/while/do/for/break/continue`, recursion, and a set of intrinsics that map onto the BIOS and the I/O ports. The shell, Pong, Life, Forth and the `hello` programs are written in it. Reference: `tiny-c.md`.
+The workhorse: 16-bit `int`, unsigned `char`, global arrays, the arithmetic, bitwise, shift, comparison, logical, compound-assignment and `++`/`--` operators (no `?:`, no `sizeof`), `if/while/do/for/break/continue`, recursion, and a set of intrinsics that map onto the BIOS and the I/O ports. The shell, Pong, Life, Forth and the `hello` programs are written in it. Reference: `tiny-c.md`.
 
 ```c
 int main() { puts("Hello, TuringOS!"); return 0; }

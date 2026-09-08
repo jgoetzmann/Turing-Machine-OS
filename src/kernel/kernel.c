@@ -298,7 +298,7 @@ static int k_after_dispatch(kernel_t *k, int r, int *bp)
         bios_tick();
         hal_display(mem_raw() + TOS_DISPLAY_BASE(L));
         /* Frame pacing is the host loop's job: kernel_step returns KSTOP_VSYNC and never sleeps
-           (CLAUDE.md, SPEC WS4-03). See the KSTOP_VSYNC arm in src/main.c and kernel_run below. */
+           (decisions.md B25, SPEC WS4-03). See the KSTOP_VSYNC arm in src/main.c and kernel_run below. */
         if (k_transit(k, k->resume_state == KS_RUNNING ? 3 : 2)) {
             *bp = 1;
         }

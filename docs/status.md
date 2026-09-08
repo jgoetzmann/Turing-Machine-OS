@@ -20,7 +20,7 @@ The compilers are ROM services by design (`decisions.md` A7, `languages.md`); a 
 |---|---|---|
 | `make` / `make all` | `build/turingos`, host tools | gcc or clang |
 | `make shell` | `build/bin/shell.com` (compiled by the project's own compiler) | — |
-| `make gen` | `build/gen/{shell_blob.c,constants.json,layout.json}`, copied to `web/src/generated/` | — |
+| `make gen` | `build/gen/{shell_blob.c,constants.json,layout.json}`; the two JSON files are copied to `web/src/generated/` | — |
 | `make demo-disk` | `build/disk/demo.img`, `web/public/demo.img` | — |
 | `make wasm` | `web/public/turingos.{js,wasm}` | Emscripten 6.0.9 (`web/emsdk-version.txt`) |
 | `make web` | `web/dist/` | Node ≥ 22, npm |
@@ -30,14 +30,14 @@ The compilers are ROM services by design (`decisions.md` A7, `languages.md`); a 
 ## Tests
 
 - `make test` builds everything and runs `tests/run_tests.sh`: every `tests/**/test_*.c` compiled standalone against `build/libtos.a`, plus every `tests/**/*.sh`. It prints `PASS: <name>` per test and `N/N passed` at the end, and exits non-zero on any failure.
-- `make test` runs 83 tests (43 C files and 40 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 59 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
-- `make test-web` runs `web/test/*.test.mjs` with `node --test` against the real wasm: boot, a shell session (`dir`, `cc`, `run`, `halt`), every demo's `.expected` output, and `layout.json` against the wasm's actual struct offsets.
+- `make test` runs 83 tests (43 C files and 40 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 59 Cypress tests in a headless browser. Tests are named after the behavior they pin: 63 distinct behavior ids (`WSn-mm`) from the checklist in `v2-roadmap.md` are cited by name across the three suites.
+- `make test-web` runs `web/test/*.test.mjs` with `node --test` against the real wasm: boot, a shell session (`dir`, `cc`, `run`, `halt`), the six `demos/hello` programs against their `.expected` files, and `layout.json` against the wasm's actual struct offsets.
 - `make test-e2e` builds the site and drives it with Cypress: the thirteen panels mount and draw, the toolbar
   runs, steps, resets and reports, breakpoints fire, time travel seeks, the levers rebuild the machine without
   losing the disk, every demo loads and runs, and the editor compiles, saves and reports errors on the right line.
 - CI (`.github/workflows/ci.yml`) runs `make test` on ubuntu and macos and once more with `-fsanitize=address,undefined`, then the wasm build, the Node tests, the site build and the Cypress suite. `pages.yml` builds the wasm and the site and deploys on push to `main`.
 
-Coverage by area (behavior ids from the spec):
+Coverage by area (behavior ids from `v2-roadmap.md`):
 
 | Area | Covered |
 |---|---|
@@ -67,7 +67,7 @@ Coverage by area (behavior ids from the spec):
 | tiny-C | no pointers, structs, `switch`, `?:`, `sizeof`, floats, local arrays; ≤ 4 params, ≤ 32 locals, ≤ 256 globals, ≤ 64 functions | `tiny-c.md`, `decisions.md` B16 |
 | CPU | 8080 only: no Z80 opcodes, no CP/M BDOS (`CALL 5`), interrupts limited to EI/DI flag storage, and 20H/30H are NOPs rather than the 8085's RIM/SIM | `decisions.md` A2, A5, B24 |
 | Speed of tiny-C code | Life costs ~290,000 instructions per generation (3.0 M cycles, so about two thirds of a generation per second at a virtual 2 MHz, dozens per second unthrottled); Pong ≤ 3,700 per frame | 16-bit `HL` arithmetic everywhere, `decisions.md` B21 |
-| Native throughput | ~39 M instructions/s, ~35 M with the trace on (`make bench`, Apple M-series, `-O2`); the wasm build is 120 KB | — |
+| Native throughput | ~37 M instructions/s, ~32 M with the trace on (`make bench`, Apple M-series, `-O2`; several percent of run-to-run spread, 35-42 M and 31-34 M observed); the wasm build is 120,633 bytes | — |
 
 ## Not in this machine
 

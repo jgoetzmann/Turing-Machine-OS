@@ -1,7 +1,7 @@
 /* tests/emu/test_v2_disasm.c
  * Spec-derived tests for the disassembler (src/emu/disasm.h).
  * Behavior: WS1-08 (disasm_one formatting and lengths; cross-checked with cpu_opcode_len, WS1-05).
- * Written from .fullsend/SPEC.md only; no implementation was consulted.
+ * Written from the v2 specification only; no implementation was consulted.
  */
 #include "../testfw.h"
 #include "emu/disasm.h"

@@ -123,8 +123,10 @@ Three things fall out of that table, and only the first is the one people expect
    2,145, and it finishes in a fifth of the 8080 instructions even though each of its steps is more
    expensive (161 instructions per TM step against 85).
 2. **Extra machine tapes do nothing for a program that does not use them.** `pal1` is a one-tape TM: at
-   k = 1, 2 and 4 it costs the same three instructions' difference, which is the one extra `OUT 02H` the
-   compiled program issues to select its tape.
+   k = 1, 2 and 4 it costs the same to within two instructions, and that difference is the
+   compare-and-jump chain (`IN 04H`, `CPI`/`JZ`, one `JMP`) the compiled program runs once at start-up
+   to place its tape according to k. The `OUT 02H` tape select runs before every cell access and costs
+   the same at every k.
 3. **Giving each TM tape its own machine tape is worth about 1%,** not the factor the TM-step table
    suggests. On one machine tape, `pal2`'s two tapes sit 8 KB apart, so every alternation moves the head
    8,192 cells; on two machine tapes both live at `0x4000`, so switching costs nothing. That saves 7.5 M

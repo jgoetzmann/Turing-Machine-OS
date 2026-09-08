@@ -48,7 +48,7 @@ changes this code next. `git log` has the rest.
 
 **Context.** The machine's memory *is* the tape. Host allocations for kernel/emulator state would put part of the machine outside the model.
 
-**Decision.** `malloc`/`calloc`/`realloc` are forbidden in `src/emu`, `src/bios`, `src/kernel`, `src/fs`. Everything is statically sized: open-file table (16), BIOS output ring (1 KB), directory (64 entries), snapshot/trace rings in v2. The compiler (`src/compiler/`) is a host tool and is exempt, though today it also uses static arrays.
+**Decision.** `malloc`/`calloc`/`realloc` are forbidden in `src/emu`, `src/bios`, `src/kernel`, `src/fs`. Everything is statically sized: open-file table (16), BIOS output ring (4 KB), directory (64 entries), snapshot/trace rings in v2. The compiler (`src/compiler/`) is a host tool and is exempt, though today it also uses static arrays.
 
 **Consequences.** Every limit is a documented constant; WebAssembly memory can be sized exactly at build time (B1); determinism is easy to guarantee (WS1-16).
 
@@ -140,13 +140,13 @@ changes this code next. `git log` has the rest.
 
 **Decision.** `L ∈ {32K, 48K, 64K}`. Only `0x0000–0x3FFF` is fixed; the banked window ends at `TOP−0x2001`, scratch at `TOP−0x1001`, stack at `TOP−0x201`, display at `TOP−0x101`, metadata at `TOP−1`. The loader sets SP before jumping to `0x0100` (as CP/M's CCP did); the compiler stops emitting `LXI SP`. An access at or beyond `L` is a tape fault → `HALT` with reason 4.
 
-**Consequences.** One `.com` runs at every tape size; the shell (2.6 KB) and every demo are tested at 32 K; the visualizer can show the head hitting the end of the tape.
+**Consequences.** One `.com` runs at every tape size; the shell (2.6 KB), `ADD.C`, `MEMTEST.C`, `HELLO.BF`, `BB2.TM`, `HELLO.ASM` and the fault demo are tested at 32 K; the visualizer can show the head hitting the end of the tape.
 
 ### B8. Honesty rule: every claim on the site is backed by a test or a link to the line
 
 **Context.** The "5 test programs" were placeholders that `puts()` the expected answer; the dirty map never worked; `KS_IDLE` was unreachable; several memory-map regions were fiction. A public explainer cannot be built on that.
 
-**Decision.** Architecture tables (addresses, syscall ids, FSM transitions, compiler features) are generated from source and checked by tests; every demo has an expected-output or golden-frame test; the site footer shows the built commit and code claims link to file:line at that commit.
+**Decision.** Architecture tables (addresses, syscall ids, FSM transitions, compiler features) are generated from source and checked by tests; every demo has an expected-output or golden-frame test; the site footer shows the built commit and every doc page links to its Markdown source at that commit.
 
 ### B9. Commit conventions: no co-author or tool trailers
 
@@ -158,7 +158,7 @@ changes this code next. `git log` has the rest.
 
 **Context.** GitHub Pages serves static files from `/Turing-Machine-OS/` with no server-side routing, so `/architecture` would 404 on a direct visit. The docs must stay readable as plain Markdown on GitHub and there must be exactly one copy of them. The stack is Vite + TypeScript with no runtime dependencies.
 
-**Decision.** One `index.html`; every page is a hash route (`#/`, `#/playground`, `#/architecture`, `#/decisions`, `#/demos`, `#/demos/<name>`, `#/languages`, `#/how-it-was-built`, `#/status`). `web/scripts/build-content.mjs` converts `docs/*.md` (slug = file name without `.md`, title = first `# ` heading) and `demos/<name>/README.md` (slug `demos/<name>`) with `marked` into `web/src/generated/content.ts` at build time, and copies `tour.json` and the demo sources into `tours.ts` / `demos.ts`. The playground's whole configuration lives in the hash query (`?demo=…&tapes=…&len=…&hz=…&seed=…&input=…&disks=…&trace=…&speed=…&bp=…`).
+**Decision.** One `index.html`; every page is a hash route: `#/`, `#/playground`, `#/demos`, `#/demos/<name>` and `#/status`, plus `#/<slug>` for every `docs/<slug>.md`, which today means `#/architecture`, `#/asm`, `#/decisions`, `#/languages`, `#/levers`, `#/tiny-c`, `#/tm`, `#/turing-machine` and `#/v2-roadmap`. `web/scripts/build-content.mjs` converts `docs/*.md` (slug = file name without `.md`, title = first `# ` heading) and `demos/<name>/README.md` (slug `demos/<name>`) with `marked` into `web/src/generated/content.ts` at build time, and copies `tour.json` and the demo sources into `tours.ts` / `demos.ts`. The playground's whole configuration lives in the hash query (`?demo=…&tapes=…&len=…&hz=…&seed=…&input=…&disks=…&trace=…&speed=…&bp=…`).
 
 **Consequences.** Deep links work with no 404 fallback tricks; a URL fully describes a machine configuration and can be pasted into an issue; no Markdown parser ships to the browser; `docs/` is the single source for the site and for GitHub. The router has to render generated HTML, so the content build runs before `tsc` and `vite build`.
 
@@ -200,7 +200,7 @@ changes this code next. `git log` has the rest.
 
 **Decision.** Boot, `RUN` and `tos_load_com` set `SP = TOS_STACK_TOP(L)`, `PC = 0x0100` and the tape selection to 0 before the first instruction. tiny-C, the assembler's output, the TM and Brainfuck compilers never emit `LXI SP`. The value is published at `TOS_META_SP_INIT`. A tiny-C image begins with `CALL main ; HLT`.
 
-**Consequences.** One `.com` runs on 32K, 48K and 64K tapes; the shell and every demo are tested at 32K. A program's `HLT` returns to the shell with a fresh SP. Hand-written assembly *may* set its own SP, but is then non-portable, and the docs say so.
+**Consequences.** One `.com` runs on 32K, 48K and 64K tapes; the shell and five of the eight demos are tested at 32K. A program's `HLT` returns to the shell with a fresh SP. Hand-written assembly *may* set its own SP, but is then non-portable, and the docs say so.
 
 **Alternatives rejected.** A relocation header (nothing else needs one); computing SP in every program prologue from `IN 05H` (eight bytes in every binary for something the loader knows).
 

@@ -33,7 +33,7 @@ L ∈ {32K, 48K, 64K}. Only `0x0000–0x3FFF` is fixed. The banked window ends a
 
 An access at or beyond L is a **tape fault**: reads return `0xFF`, writes are dropped, and the kernel halts with reason 4 after the current instruction. `demos/fault/fault.c` walks writes upward from `0x4000` until this happens. On a 32K tape it faults; on 64K it reaches the metadata block and returns to the shell.
 
-Tests: WS4-02a, WS6-09; the shell and every demo run at 32K.
+Tests: WS4-02a, WS6-09. The shell and every demo run at 32K, though only the console, Brainfuck, TM, assembler and fault demos are covered there by a test.
 
 ## 2. Clock (`HZ`)
 

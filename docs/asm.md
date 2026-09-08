@@ -29,9 +29,12 @@ All of the 8080:
 | Arithmetic | `ADD r` `ADI imm8` `ADC r` `ACI imm8` `SUB r` `SUI imm8` `SBB r` `SBI imm8` `INR r` `DCR r` `INX rp` `DCX rp` `DAD rp` `DAA` |
 | Logical | `ANA r` `ANI imm8` `ORA r` `ORI imm8` `XRA r` `XRI imm8` `CMP r` `CPI imm8` `RLC` `RRC` `RAL` `RAR` `CMA` `CMC` `STC` |
 | Branch | `JMP addr` `JNZ JZ JNC JC JPO JPE JP JM addr` `CALL addr` `CNZ CZ CNC CC CPO CPE CP CM addr` `RET` `RNZ RZ RNC RC RPO RPE RP RM` `RST n` (0–7) `PCHL` |
-| Stack / misc | `PUSH rp` `POP rp` `XTHL` `SPHL` `IN port` `OUT port` `EI` `DI` `HLT` `NOP` `RIM` `SIM` |
+| Stack / misc | `PUSH rp` `POP rp` `XTHL` `SPHL` `IN port` `OUT port` `EI` `DI` `HLT` `NOP` |
 
 `r` is `A B C D E H L M`; `rp` is `B D H SP` (or `PSW` for `PUSH`/`POP`).
+
+`RIM` and `SIM` are also accepted, as the 8085's spellings of the bytes `20H` and `30H`; this 8080 runs
+both as NOPs (see the disassembler section below).
 
 ## Directives
 
@@ -75,22 +78,36 @@ A few encodings worth knowing when reading the tape map: `MVI A,05H` is `3E 05`;
 ## Example: `demos/asm/hello.asm`
 
 ```
-; prints HELLO FROM ASM through BIOS CONOUT
-        ORG 0100H
-start:  LXI H,msg
-loop:   MOV A,M
-        ORA A           ; zero byte ends the string
-        JZ done
-        MOV C,A         ; C = byte
-        MVI A,02H       ; CONOUT
-        OUT 01H         ; BIOS call
-        INX H
-        JMP loop
-done:   HLT
-msg:    DB 'HELLO FROM ASM',0AH,0
+; hello.asm -- prints HELLO FROM ASM through BIOS CONOUT.
+; BIOS call: function id in A, argument byte in C, then OUT 1.
+; The loader sets SP; a .com must not touch it.
+;
+; The message is stored with '_' (5FH) in place of each space: every data
+; byte is then a documented one-byte opcode (letters are MOVs, 0AH is LDAX B,
+; 00H is NOP), so `disasm HELLO.COM` reassembles to identical bytes. The
+; loop turns 5FH back into 20H before printing.
+        ORG     0100H
+CONOUT  EQU     2               ; TOS_BIOS_CONOUT
+
+START:  LXI     H,MSG           ; HL -> message (forward reference)
+LOOP:   MOV     A,M             ; next byte
+        ORA     A               ; zero terminator?
+        JZ      DONE
+        CPI     5FH             ; '_' stands for a space
+        JNZ     SEND
+        MVI     A,20H
+SEND:   MOV     C,A             ; C = character
+        MVI     A,CONOUT
+        OUT     1               ; BIOS CONOUT
+        INX     H
+        JMP     LOOP
+DONE:   HLT                     ; back to the shell
+
+MSG:    DB      'HELLO_FROM_ASM',10,0
+        END
 ```
 
-`build/asm demos/asm/hello.asm out.com` then `run` prints `HELLO FROM ASM`. Talking to the machine from assembly is the same as from C: function id in A, argument in C or DE, `OUT 01H`; `OUT 02H` selects a tape; `IN 03H..05H` read keys, tape count and tape length (see `architecture.md` §6-7).
+Thirteen instructions, 41 bytes. `build/asm demos/asm/hello.asm out.com` then `run` prints `HELLO FROM ASM`. Talking to the machine from assembly is the same as from C: function id in A, argument in C or DE, `OUT 01H`; `OUT 02H` selects a tape; `IN 03H..05H` read keys, tape count and tape length (see `architecture.md` §6-7).
 
 ## Disassembler
 

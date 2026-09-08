@@ -1,11 +1,9 @@
 # TuringOS design decisions
 
-Five decisions shaped the machine, and they are written out in full below: **Context → Decision →
-Consequences → Alternatives rejected.** Everything else that got decided is one line each, in the
-reference at the bottom, because the docs, the source and the tests cite these ids and the ids have to
-keep resolving. Ids are stable and never reused; B7 was about tooling rather than about the machine and
-went away with the tooling. Part C is the details that bite whoever changes this code next. `git log`
-has the reasoning that did not fit.
+Five decisions shaped the machine and are written out in full: **Context → Decision → Consequences →
+Alternatives rejected.** Everything else that got decided is one line each in the reference at the
+bottom. Ids are stable and never reused; B7 was about tooling and went away with it. Part C is the
+details that bite whoever changes this code next. `git log` has the reasoning that did not fit.
 
 ---
 
@@ -68,8 +66,7 @@ has the reasoning that did not fit.
 
 ## Everything else, one line each
 
-The mechanism behind each is in the code the line names. These ids are cited from the other documents,
-from source comments and from test names, so they stay here whatever else changes.
+These ids are cited from the other documents, from source comments and from test names.
 
 **A2. Intel 8080, not Z80.** Z80-only instructions are errors rather than extensions, which keeps the emulator small enough to test opcode by opcode. Rejected: the Z80 (bigger surface, no gain for the TM story), the 6502, an invented ISA.
 

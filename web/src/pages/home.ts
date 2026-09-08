@@ -49,7 +49,7 @@ export function renderHomePage(mount: HTMLElement, ctx: AppContext): Page {
     <section class="features" aria-label="Highlights">
       <article class="card">
         <h2>Write C, watch it run</h2>
-        <p>The editor in the page compiles a C subset to 8080 machine code, saves it to the virtual disk, and runs it on the emulated CPU. Errors come back on the right line. The compiler is the same one that builds this OS's own shell.</p>
+        <p>The editor in the page compiles a C subset to 8080 machine code, saves it to the virtual disk, and runs it on the emulated CPU. Errors come back on the right line. It is the same compiler that builds this OS's own shell.</p>
         <a href="#/playground">Open the editor</a>
       </article>
       <article class="card">
@@ -59,17 +59,17 @@ export function renderHomePage(mount: HTMLElement, ctx: AppContext): Page {
       </article>
       <article class="card">
         <h2>Deterministic replay</h2>
-        <p>Snapshots plus a replayable input log let you scrub backwards and forwards through a run and get a byte-identical tape at every step. Nothing in the core blocks or reads a clock, which is what makes that possible.</p>
+        <p>Snapshots plus a replayable input log let you scrub backwards and forwards through a run and get a byte-identical tape at every step. Nothing in the core blocks or reads a clock.</p>
         <a href="#/playground">Scrub a run</a>
       </article>
       <article class="card">
         <h2>Levers, not rebuilds</h2>
-        <p>Tape count (1, 2, 4), tape length (32K, 48K, 64K), clock, seed, disks and trace are set at runtime on a machine that never allocates, so one binary runs at every size.</p>
+        <p>Tape count (1, 2, 4), tape length (32K, 48K, 64K), clock, seed, disks and trace are set at runtime, so one binary runs at every size.</p>
         <a href="#/levers">The levers</a>
       </article>
       <article class="card">
         <h2>One tape or two, measured</h2>
-        <p>The same palindrome checker takes 2,145 Turing-machine steps on one tape and 195 on two, at n = 64. Underneath, giving each tape its own memory buys about 1%: the interpreter's own fetches swamp the head motion.</p>
+        <p>The same palindrome checker takes 2,145 Turing-machine steps on one tape and 195 on two, at n = 64. Giving each tape its own memory buys about 1%: the interpreter's own fetches swamp the head motion.</p>
         <a href="#/turing-machine">The accounting</a>
       </article>
     </section>

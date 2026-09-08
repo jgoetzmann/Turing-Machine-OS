@@ -3,16 +3,43 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="TuringOS: a Turing-machine-style 8080 computer that boots a CP/M-like shell, compiled to WebAssembly and visualized live in the browser." />
+    <meta name="description" content="TuringOS is an operating system built out of a Turing machine's parts: a byte-array tape, an Intel 8080 program counter for a head, and a six-state kernel. One C99 core, running here as WebAssembly, with every head move and state transition visible." />
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#050a06" />
     <title>TuringOS</title>
+
+    <!-- Link previews. Anything that does not run JavaScript sees only these tags and the
+         <noscript> block below, so both carry the real description rather than a placeholder. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="TuringOS" />
+    <meta property="og:url" content="https://jgoetzmann.github.io/Turing-Machine-OS/" />
+    <meta property="og:title" content="TuringOS: an operating system built out of a Turing machine's parts" />
+    <meta property="og:description" content="A byte-array tape, an Intel 8080 program counter for a head, a six-state kernel. One C99 core runs natively and as WebAssembly, and the browser shows every head move, state transition and tape cell change as they happen." />
+    <meta property="og:image" content="https://raw.githubusercontent.com/jgoetzmann/Turing-Machine-OS/main/docs/img/playground.png" />
+    <meta property="og:image:alt" content="The TuringOS playground: tape map, tape strip with the head, registers, kernel state machine, 64x32 display and console." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TuringOS: an operating system built out of a Turing machine's parts" />
+    <meta name="twitter:description" content="A byte-array tape, an Intel 8080 program counter for a head, a six-state kernel. One C99 core runs natively and as WebAssembly, live in the page." />
+    <meta name="twitter:image" content="https://raw.githubusercontent.com/jgoetzmann/Turing-Machine-OS/main/docs/img/playground.png" />
+
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23050a06'/%3E%3Crect x='4' y='12' width='24' height='8' fill='none' stroke='%234cff7a' stroke-width='2'/%3E%3Crect x='14' y='12' width='4' height='8' fill='%234cff7a'/%3E%3Cpath d='M16 4v6M13 7l3 3 3-3' stroke='%234cff7a' stroke-width='2' fill='none'/%3E%3C/svg%3E" />
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <div id="app"></div>
-    <noscript>TuringOS needs JavaScript and WebAssembly to run the machine in your browser.</noscript>
+    <noscript>
+      <h1>TuringOS</h1>
+      <p>
+        An operating system built out of a Turing machine's parts. The tape is a byte array, the head
+        is an Intel 8080's program counter, and the finite control is a six-state kernel. One C99 core
+        runs it as a native binary and, compiled to WebAssembly, in this page.
+      </p>
+      <p>
+        The live machine needs JavaScript and WebAssembly. The source, the architecture notes and the
+        design decisions are readable without either:
+        <a href="https://github.com/jgoetzmann/Turing-Machine-OS">github.com/jgoetzmann/Turing-Machine-OS</a>.
+      </p>
+    </noscript>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

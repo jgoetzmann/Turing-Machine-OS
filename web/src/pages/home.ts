@@ -32,41 +32,45 @@ export function renderHomePage(mount: HTMLElement, ctx: AppContext): Page {
   root.innerHTML = `
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-copy">
-        <p class="eyebrow">TuringOS v2</p>
-        <h1 id="hero-title">A computer built like a Turing machine.</h1>
-        <p class="lead">One C99 core: an Intel 8080 reads and writes a tape, a finite-state kernel decides what happens next, and a small CP/M-style shell boots on top. The same code runs natively, and right here as WebAssembly.</p>
+        <p class="eyebrow">22,000 lines of C99 · native and WebAssembly · 205 tests</p>
+        <h1 id="hero-title">Watch an operating system run, one instruction at a time.</h1>
+        <p class="lead">TuringOS is built out of a Turing machine's parts: the tape is a byte array, the head is an Intel 8080's program counter, and the finite control is a six-state kernel. The same C99 core runs natively, and right here as WebAssembly.</p>
         <p class="hero-actions">
-          <a class="btn btn-primary" href="#/playground">Open playground</a>
-          <a class="btn" href="#/architecture">Read the architecture</a>
+          <a class="btn btn-primary" href="#/playground">Open the playground</a>
           <a class="btn" href="#/demos">Browse demos</a>
         </p>
       </div>
       <div class="hero-machine" aria-label="Live machine running count.c">
         <div class="hero-strip" data-strip aria-label="Tape strip around the head"></div>
         <pre class="hero-console" data-console aria-live="polite" aria-label="Console output"></pre>
-        <p class="hero-status" data-status role="status">Loading the machine…</p>
+        <p class="hero-status" data-status role="status">Loading the machine (WebAssembly)…</p>
       </div>
     </section>
     <section class="features" aria-label="Highlights">
       <article class="card">
-        <h2>Watch the head move</h2>
-        <p>Every instruction is a read or write on the tape. At 30 steps per second you can follow each head move; at full speed the shell boots in milliseconds.</p>
-        <a href="#/playground?speed=30">Playground at 30 steps/s</a>
+        <h2>Write C, watch it run</h2>
+        <p>The editor in the page compiles a C subset to 8080 machine code, saves it to the virtual disk, and runs it on the emulated CPU. Errors come back on the right line. The compiler is the same one that builds this OS's own shell.</p>
+        <a href="#/playground">Open the editor</a>
       </article>
       <article class="card">
-        <h2>Pull the levers</h2>
-        <p>Tape count (1, 2, 4), tape length (32K, 48K, 64K), clock, seed, disks and trace are levers on the machine, not compile-time settings. Machine levers reset it; view levers apply live.</p>
-        <a href="#/levers">The levers</a>
-      </article>
-      <article class="card">
-        <h2>Four languages</h2>
-        <p>Tiny-C, 8080 assembly, a Turing-machine rule language and Brainfuck all compile to the same <code>.COM</code> images, from the in-page editor or the shell.</p>
+        <h2>Four front ends, one backend</h2>
+        <p>Tiny-C, 8080 assembly, a Turing-machine rule language and Brainfuck all compile to the same flat <code>.com</code> images loaded at <code>0x0100</code>, from the editor or from the shell.</p>
         <a href="#/languages">Languages</a>
       </article>
       <article class="card">
-        <h2>Time travel</h2>
-        <p>Snapshots every thousand steps plus a replayable input log mean you can scrub backwards and forwards through a run and get byte-identical tapes.</p>
-        <a href="#/decisions">Design decisions</a>
+        <h2>Deterministic replay</h2>
+        <p>Snapshots plus a replayable input log let you scrub backwards and forwards through a run and get a byte-identical tape at every step. Nothing in the core blocks or reads a clock, which is what makes that possible.</p>
+        <a href="#/playground">Scrub a run</a>
+      </article>
+      <article class="card">
+        <h2>Levers, not rebuilds</h2>
+        <p>Tape count (1, 2, 4), tape length (32K, 48K, 64K), clock, seed, disks and trace are set at runtime on a machine that never allocates, so one binary runs at every size.</p>
+        <a href="#/levers">The levers</a>
+      </article>
+      <article class="card">
+        <h2>One tape or two, measured</h2>
+        <p>The same palindrome checker takes 2,145 Turing-machine steps on one tape and 195 on two, at n = 64. Underneath, giving each tape its own memory buys about 1%: the interpreter's own fetches swamp the head motion.</p>
+        <a href="#/turing-machine">The accounting</a>
       </article>
     </section>
     <section class="home-demos" aria-labelledby="home-demos-title">
@@ -140,7 +144,7 @@ export function renderHomePage(mount: HTMLElement, ctx: AppContext): Page {
     if (now - lastStatusAt > 120) {
       lastStatusAt = now;
       const cpu = engine.cpu();
-      statusEl.textContent = `${stateNameOf(engine.state())} · step ${engine.steps().toLocaleString()} · PC ${hex16(cpu.pc)} · ${HERO_SPEED} steps/s`;
+      statusEl.textContent = `${stateNameOf(engine.state())} · step ${engine.steps().toLocaleString()} · head at ${hex16(cpu.pc)} · ${HERO_SPEED} steps/s`;
     }
   }
 

@@ -103,9 +103,10 @@ Key bits for `keys()`: W 1, S 2, UP 4, DOWN 8, SPACE 16, ESC 32, ENTER 64, ANY 1
 ```
 
 - The loader sets SP; the compiler **must not emit `LXI SP`**. The same binary therefore runs on a 32K, 48K or 64K tape.
-- Output ≤ 16,128 bytes (the TPA). Source ≤ 32,768 bytes. At most 256 globals and 64 functions. Expressions and
-  statements nest at most 96 deep, and one expression may chain at most about 1,024 operands; past either the
-  compiler stops with `expression nests too deeply` rather than running out of its own stack.
+- Output ≤ 16,128 bytes (the TPA). Source ≤ 32,768 bytes. At most 256 globals and 64 functions. Expressions nest
+  at most 96 deep, statements 512 deep (an else-if chain is one level per arm), and one expression may chain at
+  most about 1,024 operands; past any of those the compiler stops with `expression nests too deeply` rather
+  than running out of its own stack.
 - `&&` / `||` intermediates are kept in registers and on the stack: there is no fixed scratch address, so a program larger than 8 KB whose code crosses `0x20FC` is safe (WS1-13).
 
 ## Diagnostics

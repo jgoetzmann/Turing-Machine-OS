@@ -63,7 +63,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Context.** A first version of the shell was host C that could never run on the machine.
 
-**Decision.** `src/shell/shell_tpa.c` is written in the project's own C subset, compiled by the project's own compiler to `build/bin/shell.com` (2,634 bytes; the v1 shell was 5,115), and loaded into the TPA at boot. Line input uses BIOS `READLINE`/`LINEGET`/`LINELEN` so the 8080 code never handles raw keystrokes. `halt` returns from `main()` so the post-`main` `HLT` is the one that stops the machine.
+**Decision.** `src/shell/shell_tpa.c` is written in the project's own C subset, compiled by the project's own compiler to `build/bin/shell.com` (2643 bytes; the v1 shell was 5,115), and loaded into the TPA at boot. Line input uses BIOS `READLINE`/`LINEGET`/`LINELEN` so the 8080 code never handles raw keystrokes. `halt` returns from `main()` so the post-`main` `HLT` is the one that stops the machine.
 
 **Consequences.** The shell is dogfood for the compiler and the strongest demo the project has ("the OS compiles its own shell", roadmap WS6-06). Its command parser is character-by-character because the compiler had no arrays at the time, a limitation WS5 removes.
 
@@ -270,7 +270,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 ### B21. Life runs at what an 8080 can do, and the criterion says so
 
-**Context.** The roadmap asked for Game of Life at ≥ 10 generations/s at a virtual 2 MHz. A 64×32 board is 2,048 cells; tiny-C v2 evaluates everything in 16 bits through `HL`, so even the optimised in-place generation (column sums, a running three-column window, a table lookup for B3/S23, no shifts or multiplies) costs about 444,000 instructions, roughly 0.6 generations/s at 2 MHz, dozens per second unthrottled.
+**Context.** The roadmap asked for Game of Life at ≥ 10 generations/s at a virtual 2 MHz. A 64×32 board is 2,048 cells; tiny-C v2 evaluates everything in 16 bits through `HL`, so even the optimised in-place generation (column sums, a running three-column window, a table lookup for B3/S23, no shifts or multiplies) costs about 290,000 instructions and 3.0 M cycles, roughly two thirds of a generation per second at 2 MHz, dozens per second unthrottled.
 
 **Decision.** The acceptance criterion is now "≤ 500,000 instructions per generation" and is enforced by `tests/kernel/test_v2_ws6_demos_api.c`; `docs/status.md` states the measured number. The alternative, hand-written assembly or a compiler with 8-bit arithmetic and pointer increments, is worth doing but is a different project than "a demo written in the OS's own language".
 
@@ -314,7 +314,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Decision.** Eight images are kept, each tagged with the serial number of the load that filled it; a replayed load whose slot has been recycled fails the seek instead of loading a different program. A seek that cannot reach its target puts the machine back where it was. Output is suppressed only for steps the host has already seen. The trace is disabled during a replay. Snapshot slot 0 holds the first snapshot forever and the other 31 rotate. Restoring a snapshot clears every page age stamped after that step. The snapshot interval is honoured inside a long `kernel_step` call, so it really does bound how far a seek has to replay.
 
-**Consequences.** `tos_seek` either reconstructs the exact machine of that step or returns -1; there is no third answer. `tests/kernel/test_v2_seek_fidelity.c` covers each case.
+**Consequences.** A seek that returns 0 has reconstructed exactly the machine of that step, and the output of the steps it re-ran for the first time is delivered only then; a seek that returns -1 has changed nothing the caller can see, except that it puts the machine back by replaying, which needs the input log. Under the CLI, where console bytes come from the host's stdin rather than the log, that last step can itself fail and leave the machine at the nearest step it could reach. The trace ring is not rewritten: events from an abandoned future stay in it, with their original step numbers. `tests/kernel/test_v2_seek_fidelity.c` covers each case.
 
 **Alternatives rejected.** Keeping every program image ever loaded (unbounded static memory); silently loading the closest image (the failure this fixes).
 
@@ -324,7 +324,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Decision.** The browser run loop uses the speed control alone. The `hz` lever still configures the machine, still travels in the URL, and still throttles `build/turingos`.
 
-**Consequences.** A shared link behaves the way the speed control says it will. Watching a program at a virtual 2 MHz in the browser means choosing that rate with the speed slider.
+**Consequences.** A shared link behaves the way the speed control says it will. The browser has no equivalent of a virtual 2 MHz: the speed control counts instructions per second, not cycles, so a rate in cycles is a native-only idea.
 
 **Alternatives rejected.** Applying `hz` in the browser and rewriting the three documents (two throttles multiplying into each other is hard to reason about and harder to explain).
 
@@ -334,7 +334,7 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Decision.** Expressions and statements nest at most 96 deep in the parser, and the code generator and the constant folder walk at most 1,024 AST levels, so a flat chain of a thousand operands still compiles while a runaway one stops. All of it is reported as `expression nests too deeply`. A call whose argument count differs from the declaration is `wrong number of arguments`. An `__at` variable with an initialiser is `__at variables cannot have an initialiser`, because it names memory the image does not contain. The string copy is clamped to the buffer that was actually written.
 
-**Consequences.** Three new diagnostics, all with the usual `file:line:col: message` shape, documented in `tiny-c.md`. Nothing that compiled before compiles differently.
+**Consequences.** Three new diagnostics, all with the usual `file:line:col: message` shape, documented in `tiny-c.md`. The bounds are set where no readable program reaches them (96 levels of nested expression, 512 of nested statement, 1,024 AST levels in one expression), but they are bounds: a generated source deeper than that used to compile, or crash, and now stops with a diagnostic.
 
 **Alternatives rejected.** Growing the parser's stack (the limit moves, it does not go away); honouring `__at` initialisers with a startup stub (an image whose data is written by code the user did not ask for).
 

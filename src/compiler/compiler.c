@@ -464,11 +464,15 @@ typedef struct {
     cc_diag_t *diag;
     int failed;
     int depth;                /* nested sub-expressions in flight; the parser recurses per level */
+    int stmt_depth;           /* nested statements in flight (blocks, if/else arms, loop bodies) */
 } cc_par_t;
 
 /* Recursive descent costs a C stack frame per nesting level, so the source has to be bounded
    somewhere. 96 levels is far past anything readable and far short of the smallest stack. */
 #define CC_MAX_DEPTH 96
+/* Statements nest more readily than expressions: an else-if chain is one level per arm, and code
+   that generates a dispatch table writes hundreds of them. */
+#define CC_MAX_STMT_DEPTH 512
 /* The code generator and the constant folder walk the AST, and a flat "a+a+...+a" chain is one
    node deep per term without nesting anything, so their bound is about stack frames, not style. */
 #define CC_MAX_AST_DEPTH 1024
@@ -798,10 +802,10 @@ static int p_local_decl(cc_par_t *p, cc_token_kind_t type_tok, int want_semi) {
    a parser frame, so the same bound that limits expression nesting limits this. */
 static int p_sub_stmt(cc_par_t *p) {
     int st;
-    if (p->depth >= CC_MAX_DEPTH) return p_fail(p, p->pos, MSG_NESTING);
-    p->depth++;
+    if (p->stmt_depth >= CC_MAX_STMT_DEPTH) return p_fail(p, p->pos, MSG_NESTING);
+    p->stmt_depth++;
     st = p_stmt(p);
-    p->depth--;
+    p->stmt_depth--;
     return st;
 }
 

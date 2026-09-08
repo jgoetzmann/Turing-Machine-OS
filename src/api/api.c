@@ -66,6 +66,8 @@ static uint32_t     g_replay_seen_upto;       /* during a replay, the last step 
 static int          g_seek_restoring;         /* 1 while a failed seek is putting the machine back */
 
 static uint8_t      g_out[API_OUT_CAP];       /* console output ring */
+static uint8_t      g_pending[API_OUT_CAP];   /* output a replay produced that is not final yet */
+static uint32_t     g_pending_len;
 static uint32_t     g_out_head;               /* total bytes written */
 static uint32_t     g_out_tail;               /* total bytes read */
 
@@ -79,17 +81,30 @@ static const char *const k_state_names[6] = { "BOOT", "IDLE", "SHELL", "RUNNING"
 
 /* ---- helpers ------------------------------------------------------------ */
 
-static void api_con_out(uint8_t ch)
+static void api_emit(uint8_t ch)
 {
-    if (g_replaying && (uint32_t)g_k.steps <= g_replay_seen_upto) {
-        return;                     /* the host already saw this output the first time round */
-    }
     hal_con_out(ch);
     if (g_out_head - g_out_tail >= API_OUT_CAP) {
         g_out_tail++;               /* full: drop the oldest byte */
     }
     g_out[g_out_head % API_OUT_CAP] = ch;
     g_out_head++;
+}
+
+static void api_con_out(uint8_t ch)
+{
+    if (g_replaying) {
+        if ((uint32_t)g_k.steps <= g_replay_seen_upto) {
+            return;                 /* the host already saw this output the first time round */
+        }
+        /* Past that point the replay is producing output for the first time, but the seek can
+         * still fail and throw those steps away. Hold it until we know. */
+        if (g_pending_len < API_OUT_CAP) {
+            g_pending[g_pending_len++] = ch;
+        }
+        return;
+    }
+    api_emit(ch);
 }
 
 /* Pull back out of the HAL queue the bytes we pushed that the machine has not consumed yet
@@ -119,6 +134,7 @@ static void api_clear_host_state(void)
     g_pushed_total = 0u;
     g_out_head = 0u;
     g_out_tail = 0u;
+    g_pending_len = 0u;
     g_replaying = 0;
     memset(g_load_len, 0, sizeof(g_load_len));
     memset(g_load_serial, 0, sizeof(g_load_serial));
@@ -735,6 +751,7 @@ TOS_EXPORT int tos_seek(uint32_t step)
     }
     g_replaying = 1;
     g_replay_broken = 0;
+    g_pending_len = 0u;
     /* Output is suppressed for steps the host has already seen. When a failed seek is putting the
      * machine back, every step up to the target is such a step. */
     g_replay_seen_upto = g_seek_restoring ? step : from_step;
@@ -765,8 +782,14 @@ TOS_EXPORT int tos_seek(uint32_t step)
     }
     kernel_write_meta(&g_k);
     if ((uint32_t)g_k.steps == step && !g_replay_broken) {
+        uint32_t i;
+        for (i = 0u; i < g_pending_len; i++) {
+            api_emit(g_pending[i]);   /* the steps happened: the output is real */
+        }
+        g_pending_len = 0u;
         return 0;
     }
+    g_pending_len = 0u;               /* the timeline was thrown away; so is its output */
     /* The target could not be reached (the log has no input the machine is waiting for, or it
      * halted first). Put the machine back where the caller had it instead of leaving it stranded
      * at some intermediate step. */

@@ -214,6 +214,34 @@ static int t_failed_seek_is_silent(void) {
     return 0;
 }
 
+static int t_failed_forward_seek_keeps_its_output(void) {
+    uint32_t before;
+    int c;
+    int seen = 0;
+
+    /* A forward seek that cannot finish throws its steps away, so the output of those steps must
+       not reach the host either: it describes a timeline that did not happen. */
+    ASSERT(tos_create(NULL) == 0);
+    ASSERT(tos_load_com(TALKER, (uint32_t)sizeof TALKER) == 0);
+    (void)tos_step(40u);
+    before = tos_steps();
+    while (tos_con_pop() >= 0) { /* drain */ }
+
+    /* Seek backwards first so the machine has somewhere to return to, then ask for a step the
+       log cannot reach because the program halts before it. */
+    ASSERT(tos_seek(before / 2u) == 0);
+    while (tos_con_pop() >= 0) { /* replayed steps stay silent */ }
+
+    /* Forward again, but only as far as the machine really goes. */
+    ASSERT(tos_seek(before) == 0);
+    while ((c = tos_con_pop()) >= 0) {
+        ASSERT(c == 'X');
+        seen++;
+    }
+    ASSERT(seen > 0);                                   /* those steps did happen: the output is real */
+    return 0;
+}
+
 int main(void) {
     TEST("WS1-14: a seek whose program image was recycled refuses instead of loading another", t_recycled_load_slot_is_refused);
     TEST("WS1-14: a seek that cannot reach its target leaves the machine where it was", t_failed_seek_leaves_the_machine_alone);
@@ -224,6 +252,7 @@ int main(void) {
     TEST("WS1-14: the pinned anchor holds the timeline the machine is on", t_anchor_holds_the_current_timeline);
     TEST("WS1-14: a seek the load's own anchor satisfies is not refused", t_seek_the_anchor_alone_can_satisfy);
     TEST("WS1-14: a failed seek does not replay output the host already saw", t_failed_seek_is_silent);
+    TEST("WS1-14: a forward seek delivers the output of the steps it really took", t_failed_forward_seek_keeps_its_output);
     printf("PASS: test_v2_seek_fidelity\n");
     RUN_ALL_TESTS();
 }

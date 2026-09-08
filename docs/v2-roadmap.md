@@ -29,7 +29,7 @@ Turn TuringOS into a public, interactive explainer of "an OS that is literally a
 
 ## 2. Decisions this plan makes
 
-Each is written up in `docs/decisions.md` (B1-B9) with context, consequences and the alternatives rejected.
+Each is written up in `docs/decisions.md`, the five that shaped the machine in full and the rest as a one-line reference.
 
 - **D1: one engine, compiled to WASM.** The site runs the C core via Emscripten. *Rejected:* a JS/TS re-implementation (two emulators that drift; the site would be lying about running "the OS"); Pyodide/pygbag (pygame in the browser is heavy and fragile).
 - **D2: a host abstraction layer (HAL).** All host touchpoints (console, keys, disk bytes, time, frame sync, shell blob) go through `src/hal/hal.h` with `hal_posix.c` and `hal_wasm.c`. Nothing else in `src/` includes `<stdio.h>`.

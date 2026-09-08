@@ -175,8 +175,9 @@ and snapshots. Runs are scriptable and deterministic, which is how the test suit
 
 ## Documentation
 
-Two worth opening first. [Design decisions](docs/decisions.md) is every choice with its context, its
-consequences and the alternatives that were rejected, including the ones that came out of bugs.
+Two worth opening first. [Design decisions](docs/decisions.md) is the five choices that shaped the
+machine, each with its consequences and the alternatives that were rejected, and a one-line reference
+for everything else that got decided.
 [The machine as a Turing machine](docs/turing-machine.md) is what the model asks for, what this does
 instead, and what measurably changes when you add tapes.
 

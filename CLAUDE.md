@@ -65,7 +65,8 @@ Docs: `docs/architecture.md` (what is), `docs/decisions.md` (why), `docs/levers.
   commit messages or pull requests, ever.**
 - `make test` is green for every commit on `main`. Squash work-in-progress before it lands.
 - Any change to a port, syscall, memory-map region, file format, the HAL or the JS API appends an
-  entry (Context / Decision / Consequences / Alternatives) to `docs/decisions.md` in the same commit.
+  line to `docs/decisions.md` in the same commit: a one-liner in the reference, or a full
+  Context / Decision / Consequences / Alternatives entry if it changes the shape of the machine.
 - The site makes no claim that is not backed by a test or a link to the line of code.
 
 ## Things that bite

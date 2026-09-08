@@ -142,6 +142,7 @@ export class App {
   private keyOpts: KeyboardOptions = {};
 
   private diskBackup: Uint8Array | null = null;
+  private pendingDisks: Uint8Array[] | null = null;
   private resetting = false;
   private urlSyncEnabled = true;
   private urlSyncQueued = false;
@@ -166,6 +167,11 @@ export class App {
       // A lever moved in the levers panel: the hash has to follow, or the link no longer
       // describes the machine on screen.
       this.bus.on('lever', () => this.syncUrl()),
+      this.bus.on('machine-reset-pending', () => {
+        // Something outside the app is about to re-create the machine, which zeroes every disk
+        // image. Take the same snapshot the toolbar's own reset takes.
+        if (!this.resetting) this.pendingDisks = this.snapshotDisks();
+      }),
       this.bus.on('machine-reset', () => {
         if (this.resetting) return;
         // A lever panel reset the machine behind our back: restore what the kernel forgot.
@@ -604,15 +610,9 @@ export class App {
           if (maxSteps <= 0) return;
           this.acc -= maxSteps;
         }
-        let maxCycles = Infinity;
-        const hz = engine.config.hz;
-        if (hz > 0) {
-          this.hzAcc = Math.min(hz, this.hzAcc + (hz * dt) / 1000);
-          maxCycles = Math.floor(this.hzAcc);
-          if (maxCycles <= 0) return;
-        }
-        const done = this.runBudget(maxSteps, maxCycles, MAX_FRAME_MS);
-        if (hz > 0) this.hzAcc = Math.max(0, this.hzAcc - done.cycles);
+        // The clock lever throttles the native run loop only: in the browser the speed control
+        // above is the single throttle (docs/levers.md, and the levers panel says so too).
+        const done = this.runBudget(maxSteps, Infinity, MAX_FRAME_MS);
         if (this._speed !== 'max') {
           if (this._lastStop === STOP.VSYNC && !done.timedOut) this.acc += Math.max(0, maxSteps - done.steps);
           else if (done.timedOut || this._lastStop !== STOP.BUDGET) this.acc = 0;
@@ -782,10 +782,17 @@ export class App {
   }
 
   private restoreAfterExternalReset(): void {
-    if (this.diskBackup && this.engine.diskList(0).length === 0) this.engine.loadDiskImage(0, this.diskBackup);
+    if (this.pendingDisks) {
+      this.restoreDisks(this.pendingDisks);
+      this.pendingDisks = null;
+    } else if (this.diskBackup && this.engine.diskList(0).length === 0) {
+      this.engine.loadDiskImage(0, this.diskBackup);
+    }
     this.reinstallBreakpoints();
     this.acc = 0;
     this.hzAcc = 0;
+    // The machine came back in BOOT; run it to the prompt so the console is usable again.
+    if (this.engine.state() === STATE.BOOT) this.bootToPrompt();
     this.syncUrl();
   }
 

@@ -415,6 +415,18 @@ void kernel_reset(kernel_t *k)
     kernel_init(k, &c);
 }
 
+/* Take a snapshot when snap_interval steps have gone by since the last one. */
+static void k_maybe_snapshot(kernel_t *k, uint32_t L)
+{
+    if (k->cfg.snap_interval == 0u ||
+        (uint32_t)k->steps - k->last_snapshot_step < k->cfg.snap_interval) {
+        return;
+    }
+    k->last_snapshot_step = (uint32_t)k->steps;
+    (void)snapshot_save(k);
+    hal_snapshot(mem_raw(), L, mem_raw() + TOS_META_BASE(L), TOS_META_SIZE);
+}
+
 kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
 {
     uint32_t n = 0u;
@@ -527,6 +539,9 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
                 stop = KSTOP_BUDGET;
                 break;
             }
+            /* Between two instructions is the only clean place to snapshot, and the interval has
+               to hold inside one long kernel_step call too, or it would not bound a seek. */
+            k_maybe_snapshot(k, L);
             pc = k->cpu.pc;
             hit = k_bp_pc(k, pc);
             if (hit >= 0) {
@@ -618,12 +633,7 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
     k->last_stop = (uint8_t)stop;
     k->tick++;
     kernel_write_meta(k);
-    if (k->cfg.snap_interval != 0u &&
-        (uint32_t)k->steps - k->last_snapshot_step >= k->cfg.snap_interval) {
-        k->last_snapshot_step = (uint32_t)k->steps;
-        (void)snapshot_save(k);
-        hal_snapshot(mem_raw(), L, mem_raw() + TOS_META_BASE(L), TOS_META_SIZE);
-    }
+    k_maybe_snapshot(k, L);
     if (steps_run != NULL) {
         *steps_run = n;
     }
@@ -655,16 +665,24 @@ void kernel_run(kernel_t *k)
         if (s == KSTOP_HALT) {
             return;
         }
+        if (s == KSTOP_VSYNC) {
+            hal_vsync();                  /* frame pacing belongs to this loop, not to kernel_step */
+            continue;
+        }
         if (s == KSTOP_WAIT_INPUT) {
             /* The posix HAL blocks inside hal_con_in_ready() for pipes and files, so this is only
-             * reached on a TTY with nothing typed yet: nap one frame and poll again. */
+             * reached on a TTY with nothing typed yet: nap one frame and poll again. Time spent
+             * here is the user's, not the machine's, so the throttle re-baselines afterwards. */
             hal_vsync();
+            t0 = hal_time_ms();
+            c0 = k->cpu.cycles;
             continue;
         }
         if (k->cfg.hz != 0u) {
             uint64_t want_ms = (k->cpu.cycles - c0) * 1000u / (uint64_t)k->cfg.hz;
-            while ((uint64_t)(uint32_t)(hal_time_ms() - t0) < want_ms) {
-                hal_vsync();
+            uint32_t spent = hal_time_ms() - t0;
+            if (want_ms > (uint64_t)spent) {
+                hal_sleep_ms((uint32_t)(want_ms - (uint64_t)spent));   /* sleep, never spin */
             }
         }
     }

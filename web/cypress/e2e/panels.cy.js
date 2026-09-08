@@ -114,11 +114,16 @@ describe('playground panels', () => {
       .should((t) => expect(parseInt(t.replace(/\D/g, ''), 10)).to.be.greaterThan(0));
   });
 
-  it('timeline draws and its buttons seek', () => {
+  it('timeline draws, and its buttons move the machine', () => {
     cy.canvasPainted('#panel-timeline canvas', 2);
-    cy.get('#panel-timeline button').contains('|◀').click();
-    cy.get('#panel-timeline').should('contain', 'step');
+    cy.get('[data-act="toggle"]').click();                    // pause so a seek stays put
+    cy.get('[data-out="status"]').invoke('text').then((before) => {
+      cy.get('#panel-timeline button').contains('|◀').click();
+      cy.get('[data-out="status"]').should('contain', 'Seeked to step');
+      cy.get('[data-out="status"]').should('not.have.text', before);
+    });
     cy.get('#panel-timeline button').contains('live').click();
+    cy.get('[data-act="toggle"]').should('have.text', 'Pause');
   });
 
   it('levers list the machine controls and reset works', () => {

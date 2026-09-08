@@ -543,6 +543,12 @@ void hal_keys_set(uint8_t mask) {
 /* console input                                                            */
 /* ======================================================================== */
 
+/* Extra helper (not in hal.h, like hal_con_out_pending): pushed bytes the machine has not read
+ * yet. The API layer uses it so a seek pulls back only its own input, never the stdin script. */
+uint32_t hal_con_push_pending(void) {
+    return g_push_count;
+}
+
 int hal_con_push(uint8_t ch) {
     if (g_push_count >= HAL_PUSH_CAP) {
         return -1;
@@ -706,6 +712,13 @@ void hal_vsync(void) {
         sleep_ns(g_next_frame_ns - now);
     }
     g_next_frame_ns += period;
+}
+
+void hal_sleep_ms(uint32_t ms) {
+    if (ms == 0u) {
+        return;
+    }
+    sleep_ns((uint64_t)ms * 1000000ull);
 }
 
 void hal_display(const uint8_t *fb) {

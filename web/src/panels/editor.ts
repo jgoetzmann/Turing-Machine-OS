@@ -177,7 +177,7 @@ export function createEditorPanel(root: HTMLElement, engine: Engine, bus: Bus): 
     }
     setStatus(`running ${fileName()} (${fmtInt(bytes.length)} bytes)`, 'tos-ok');
     bus.emit('program-loaded', { name: fileName(), bytes: bytes.length });
-    bus.emit('run-state', { running: true });
+    bus.emit('run-request', { running: true });   /* `run-state` is the app's notification, not a request */
   };
   const onSave = (): void => {
     const disk = parseInt(diskSel.value, 10) || 0;

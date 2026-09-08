@@ -104,6 +104,9 @@ export function createLeversPanel(root: HTMLElement, engine: Engine, bus: Bus): 
   function apply(c: Control): void {
     const value = readControl(c);
     let ok = false;
+    // A machine lever re-creates the machine and zeroes the disks; warn the app first so it can
+    // keep them.
+    if (c.def.machine) bus.emit('machine-reset-pending');
     try {
       ok = engine.leverSet(c.def.id, value);
     } catch {
@@ -161,6 +164,7 @@ export function createLeversPanel(root: HTMLElement, engine: Engine, bus: Bus): 
   root.append(grid, foot);
 
   const onReset = (): void => {
+    bus.emit('machine-reset-pending');
     engine.reset();
     status.className = 'tos-ok';
     setText(status, 'machine reset');

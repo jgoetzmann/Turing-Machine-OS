@@ -27,6 +27,7 @@ void     hal_keys_set(uint8_t mask);     /* host sets the mask (wasm: from JS; p
 /* Time / frames */
 uint32_t hal_time_ms(void);
 void     hal_vsync(void);                /* posix: sleep to the next 1/fps boundary; wasm: no-op */
+void     hal_sleep_ms(uint32_t ms);      /* posix: sleep; wasm: no-op (the page never blocks) */
 
 /* Disk images (whole-image load/save; the fs keeps images in static buffers) */
 int      hal_disk_load(uint8_t disk, uint8_t *buf, uint32_t cap);        /* bytes loaded, 0 = no image */

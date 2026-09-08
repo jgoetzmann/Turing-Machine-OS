@@ -196,7 +196,12 @@ export function createDetailPanel(root: HTMLElement, engine: Engine, bus: Bus): 
     const rn = tape > 0 ? engine.readAge(tape) : r0;
     const reg = regionAt(regions, page << 8);
     setText(pageLbl, `page ${hex2(page)}  ${hex4(page << 8)}–${hex4((page << 8) | 0xff)}  ${reg ? reg.name : ''}`);
-    setText(tapeLbl, `tape ${tape}`);
+    {
+      /* engine.disasm decodes through the machine's selected tape, so say so when the panel is
+         looking at a different one: the bytes and the mnemonics would disagree. */
+      const sel = engine.tapeSelected();
+      setText(tapeLbl, sel === tape ? `tape ${tape}` : `tape ${tape} · disassembly decodes tape ${sel}`);
+    }
 
     let html = '';
     for (let row = 0; row < 16; row++) {

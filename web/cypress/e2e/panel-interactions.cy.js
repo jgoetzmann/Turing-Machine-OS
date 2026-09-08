@@ -118,3 +118,35 @@ describe('panel interactions', () => {
     cy.get('#panel-fsm .tos-fsm-list .cnt').first().invoke('text').should('not.equal', '0');
   });
 });
+
+describe('levers keep what the user made', () => {
+  it('a machine lever keeps the files on the disk', () => {
+    cy.bootPlayground();
+    cy.get('#panel-editor button').contains('sample').click();
+    cy.get('#panel-editor input[type="text"]').clear().type('KEEPME');
+    cy.get('#panel-editor button').contains('save to disk').click();
+    cy.get('#panel-disk li', { timeout: 30000 }).should('contain', 'KEEPME.C');
+
+    cy.get('#panel-levers [data-lever="0"]').select('2');     // tapes: a machine lever
+    cy.get('#panel-tapes', { timeout: 30000 }).should('contain', 'tape 1');
+    cy.get('#panel-disk li').should('contain', 'KEEPME.C');   // the disk survived the reset
+    cy.get('#panel-console .slot-body').should('contain', 'A>');
+  });
+
+  it('the clock lever does not throttle the browser (the speed control does)', () => {
+    cy.visit('#/playground?hz=1000');
+    cy.get('[data-out="status"]', { timeout: 60000 }).should('contain', 'step');
+    cy.get('#panel-console input[type="text"]').type('dir{enter}');
+    // At 1000 Hz a throttled browser would need minutes to list the disk.
+    cy.get('#panel-console .tos-console-screen', { timeout: 20000 }).should('contain', '.C');
+  });
+
+  it('compile & run in the editor actually runs the program', () => {
+    cy.bootPlayground();
+    cy.get('[data-act="toggle"]').click();                    // paused: only a real run un-pauses
+    cy.get('#panel-editor button').contains('sample').click();
+    cy.get('#panel-editor button').contains('compile & run').click();
+    cy.get('[data-act="toggle"]').should('have.text', 'Pause');
+    cy.get('[data-out="status"]').should('contain', 'Running');
+  });
+});

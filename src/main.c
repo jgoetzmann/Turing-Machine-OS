@@ -122,6 +122,7 @@ int main(int argc, char **argv)
     int display = 0;
     int i;
     uint32_t t0;
+    uint64_t c0;
 
     kernel_config_default(&cfg);
 
@@ -246,6 +247,7 @@ int main(int argc, char **argv)
 
     /* kernel_run semantics through the API: step in slices until the machine halts. */
     t0 = hal_time_ms();
+    c0 = ((uint64_t)tos_cycles_hi() << 32) | (uint64_t)tos_cycles_lo();
     for (;;) {
         uint32_t budget = 4096u;
         int stop;
@@ -267,15 +269,19 @@ int main(int argc, char **argv)
         }
         if (stop == (int)KSTOP_WAIT_INPUT) {
             /* Only reached on a TTY with nothing typed: the posix HAL blocks inside
-             * hal_con_in_ready() when stdin is a pipe or file, so scripts never spin here. */
+             * hal_con_in_ready() when stdin is a pipe or file, so scripts never spin here.
+             * Waiting for a person is not emulated time, so the clock starts again afterwards. */
             hal_vsync();
+            t0 = hal_time_ms();
+            c0 = ((uint64_t)tos_cycles_hi() << 32) | (uint64_t)tos_cycles_lo();
             continue;
         }
         if (cfg.hz != 0u) {
             uint64_t cycles = ((uint64_t)tos_cycles_hi() << 32) | (uint64_t)tos_cycles_lo();
-            uint64_t want_ms = cycles * 1000u / (uint64_t)cfg.hz;
-            while ((uint64_t)(uint32_t)(hal_time_ms() - t0) < want_ms) {
-                hal_vsync();
+            uint64_t want_ms = (cycles - c0) * 1000u / (uint64_t)cfg.hz;
+            uint32_t spent = hal_time_ms() - t0;
+            if (want_ms > (uint64_t)spent) {
+                hal_sleep_ms((uint32_t)(want_ms - (uint64_t)spent));
             }
         }
     }

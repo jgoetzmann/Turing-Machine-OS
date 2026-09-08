@@ -593,9 +593,12 @@ export class Engine {
 
   compile(lang: 0 | 1 | 2 | 3, src: string): CompileResult {
     const m = this.module;
-    const srcLen = m.lengthBytesUTF8(src);
+    // One byte per character, the way the disk stores a file and the way the machine reads it.
+    // Encoding as UTF-8 here would compile something other than what `cc FILE.C` compiles.
+    const srcLen = src.length;
     const srcPtr = m._malloc(srcLen + 1);
-    m.stringToUTF8(src, srcPtr, srcLen + 1);
+    for (let i = 0; i < srcLen; i++) m.HEAPU8[srcPtr + i] = src.charCodeAt(i) & 0xff;
+    m.HEAPU8[srcPtr + srcLen] = 0;
     const outCap = TPA_SIZE;
     const outPtr = m._malloc(outCap);
     const errCap = 512;

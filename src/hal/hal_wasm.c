@@ -88,6 +88,11 @@ int hal_con_in(void) {
     return ch;
 }
 
+/* Extra helper (not in hal.h, like hal_con_out_pending): pushed bytes not read yet. */
+uint32_t hal_con_push_pending(void) {
+    return g_in_count;
+}
+
 int hal_con_push(uint8_t ch) {
     if (g_in_count >= HAL_IN_CAP) {
         return -1;
@@ -120,6 +125,11 @@ uint32_t hal_time_ms(void) {
 
 void hal_vsync(void) {
     /* The page paces frames with requestAnimationFrame; nothing to do here. */
+}
+
+void hal_sleep_ms(uint32_t ms) {
+    /* A browser tab must not block: the run loop yields to requestAnimationFrame instead. */
+    (void)ms;
 }
 
 /* ---- disks ------------------------------------------------------------- */

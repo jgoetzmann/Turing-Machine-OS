@@ -31,6 +31,10 @@
  * out of the BIOS output ring goes through this function instead of hal_con_out. */
 void kernel_set_con_out(void (*fn)(uint8_t ch));
 
+/* HAL helper outside hal.h (both implementations provide it): bytes we pushed that the machine
+ * has not consumed yet. */
+uint32_t hal_con_push_pending(void);
+
 /* ---- state -------------------------------------------------------------- */
 
 #define API_LOG_CAP    4096u
@@ -91,8 +95,14 @@ static void api_con_out(uint8_t ch)
  * (bounded by what we pushed, so scripted stdin is never touched). */
 static void api_drain_pushed(void)
 {
+    uint32_t queued = hal_con_push_pending();
     uint32_t i;
-    for (i = 0u; i < g_pushed_total; i++) {
+    /* Only what is still sitting in the push queue is ours to take back. Draining `g_pushed_total`
+     * blindly would eat bytes the machine already consumed, i.e. the host's stdin script. */
+    if (queued > g_pushed_total) {
+        queued = g_pushed_total;
+    }
+    for (i = 0u; i < queued; i++) {
         if (hal_con_in() < 0) {
             break;
         }

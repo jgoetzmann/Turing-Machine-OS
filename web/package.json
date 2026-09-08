@@ -11,7 +11,7 @@
     "content": "node scripts/build-content.mjs",
     "build": "npm run content && tsc --noEmit && vite build",
     "dev": "npm run content && vite",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.mjs"
   },
   "devDependencies": {
     "@types/node": "26.5.0",

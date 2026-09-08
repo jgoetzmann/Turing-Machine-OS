@@ -64,7 +64,8 @@ static int t_life_golden(void) {
     hn = (int)fread(hex, 1u, 512u, g); fclose(g); ASSERT(hn == 512);
     fb = tos_tape_ptr(0) + TOS_DISPLAY_BASE(65536u);
     for (i = 0; i < 256; i++) {
-        char b[3]; snprintf(b, 3, "%02x", fb[i]);
+        static const char hx[] = "0123456789abcdef";
+        char b[2]; b[0] = hx[fb[i] >> 4]; b[1] = hx[fb[i] & 15u];
         ASSERT((b[0] == hex[2*i] || b[0] == (char)(hex[2*i] | 0x20)) && (b[1] == hex[2*i+1] || b[1] == (char)(hex[2*i+1] | 0x20)));
     }
     return 0;
@@ -89,9 +90,17 @@ static uint32_t travel_for(const char *tmpath, const char *word, uint8_t tapes) 
     FILE *f; char src[4096]; int n, len, i; char *p;
     f = fopen(tmpath, "rb"); if (f == NULL) return 0;
     n = (int)fread(src, 1u, sizeof src - 1u, f); fclose(f); src[n] = 0;
-    /* replace the input: line */
+    /* replace the input: line (bounded copies; gcc's format-overflow analysis dislikes sprintf here) */
     p = strstr(src, "input:");
-    if (p != NULL) { char *e = strchr(p, '\n'); char tail[4096]; strcpy(tail, e ? e : ""); sprintf(p, "input: %s%s", word, tail); }
+    if (p != NULL) {
+        char *e = strchr(p, '\n');
+        char tail[4096];
+        size_t room = sizeof src - (size_t)(p - src);
+        size_t wl = strlen(word);
+        strncpy(tail, e ? e : "", sizeof tail - 1u); tail[sizeof tail - 1u] = 0;
+        if (7u + wl + strlen(tail) + 1u > room) return 0;
+        memcpy(p, "input: ", 7u); memcpy(p + 7, word, wl); strcpy(p + 7 + wl, tail);
+    }
     if (fresh(tapes) != 0) return 0;
     len = tm_compile(src, (uint32_t)strlen(src), g_img, sizeof g_img, g_err, sizeof g_err); if (len <= 0) return 0;
     if (tos_load_com(g_img, (uint32_t)len) != 0) return 0;

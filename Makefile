@@ -133,7 +133,7 @@ web: wasm gen demo-disk
 
 ## test-web: regenerate web content and run the Node tests under web/test against the wasm build (needs `npm ci` in web/ once)
 test-web: wasm gen demo-disk
-	cd web && npm run content && node --test test/
+	cd web && npm run content && node --test test/*.test.mjs
 
 ## run: run the OS interactively in this terminal
 run: all shell disk

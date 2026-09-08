@@ -12,8 +12,22 @@ const server = spawn('npx', ['vite', dev ? '' : 'preview', '--port', String(port
   env: process.env,
 });
 
+let serverExited = false;
+server.on('exit', (code) => {
+  serverExited = true;
+  if (code) console.error(`e2e: the server exited with code ${code} (is port ${port} already in use?)`);
+});
+
+/* Never leave a server behind: not when Cypress fails, not when this process is interrupted. */
+const stopServer = () => {
+  if (!serverExited) server.kill('SIGTERM');
+};
+process.on('exit', stopServer);
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => { stopServer(); process.exit(130); });
+
 async function waitForServer() {
   for (let i = 0; i < 120; i++) {
+    if (serverExited) return false;
     try {
       const r = await fetch(url);
       if (r.ok) return true;
@@ -27,12 +41,12 @@ async function waitForServer() {
 
 const up = await waitForServer();
 if (!up) {
-  server.kill('SIGTERM');
+  stopServer();
   console.error(`e2e: ${url} never came up`);
   process.exit(1);
 }
 
 const cy = spawn('npx', ['cypress', 'run', '--config', `baseUrl=${url}`], { stdio: 'inherit', env: process.env });
 const code = await new Promise((resolve) => cy.on('exit', resolve));
-server.kill('SIGTERM');
+stopServer();
 process.exit(code ?? 1);

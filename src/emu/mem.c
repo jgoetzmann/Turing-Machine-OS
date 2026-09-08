@@ -228,6 +228,26 @@ uint64_t mem_accesses(void) {
     return g_accesses;
 }
 
+/* After a snapshot restore, ages stamped later than the restored step describe a timeline that no
+ * longer exists. Drop them and recount, so mem_cells_written keeps matching the arrays. */
+void mem_forget_after(uint8_t tape, uint32_t step) {
+    uint32_t a;
+    uint8_t t;
+    if (tape >= MEM_TAPES_MAX) {
+        return;
+    }
+    for (a = 0u; a < MEM_TAPE_BYTES; a++) {
+        if (g_wage[tape][a] > step) g_wage[tape][a] = 0u;
+        if (g_rage[tape][a] > step) g_rage[tape][a] = 0u;
+    }
+    g_cells_written = 0u;
+    for (t = 0u; t < MEM_TAPES_MAX; t++) {
+        for (a = 0u; a < MEM_TAPE_BYTES; a++) {
+            if (g_wage[t][a] != 0u) g_cells_written++;
+        }
+    }
+}
+
 uint32_t mem_cells_written(void) {
     return g_cells_written;
 }

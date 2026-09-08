@@ -26,6 +26,7 @@ void      mem_set_step(uint32_t step);                  /* step number stamped i
 uint32_t *mem_write_age(uint8_t tape);                  /* uint32[65536]: step of last write (0 = never) */
 uint32_t *mem_read_age(uint8_t tape);                   /* uint32[65536]: step of last read  (0 = never) */
 void      mem_dirty_pages(uint8_t out[32], uint32_t since_step); /* bit p set if any byte of page p (any tape) was written at step >= since_step */
+void      mem_forget_after(uint8_t tape, uint32_t step);  /* drop read/write ages later than `step` (after a snapshot restore) and re-count written cells */
 uint64_t  mem_travel(void);                             /* sum of |addr_i - addr_(i-1)| over all reads+writes since mem_init */
 uint64_t  mem_accesses(void);                           /* number of reads+writes since mem_init */
 uint32_t  mem_cells_written(void);                      /* distinct (tape,addr) cells with write age != 0 */

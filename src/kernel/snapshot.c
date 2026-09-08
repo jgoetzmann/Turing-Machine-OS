@@ -64,9 +64,15 @@ int snapshot_save(const kernel_t *k)
     if (k == NULL) {
         return -1;
     }
-    /* Slot 0 keeps the first snapshot ever taken, the anchor a seek to an early step needs;
-       the rest of the ring rotates and overwrites its own oldest slot. */
-    idx = (g_seq == 0u) ? 0u : (1u + ((g_seq - 1u) % (SNAPSHOT_SLOTS - 1u)));
+    /* Slot 0 keeps the anchor a seek to an early step needs; the rest of the ring rotates and
+       overwrites its own oldest slot. A later snapshot taken at the anchor's own step replaces it,
+       because that is the state that step has on the current timeline: loading a program stores an
+       anchor at step 0 too, and resurrecting the pre-load machine would be a different run. */
+    if (g_seq == 0u || (g_slots[0].used && g_slots[0].step == (uint32_t)k->steps)) {
+        idx = 0u;
+    } else {
+        idx = 1u + ((g_seq - 1u) % (SNAPSHOT_SLOTS - 1u));
+    }
     s = &g_slots[idx];
     tapes = mem_tape_count();
     if (tapes > TOS_TAPES_MAX) {
@@ -135,18 +141,15 @@ int snapshot_restore(kernel_t *k, int slot)
     memcpy(k->bps, bps, sizeof(bps));
     k->bp_hit = -1;
 
-    /* The ages and the dirty map are not in the snapshot, so anything stamped after the step we
-       just restored describes a future that no longer happened: forget it. */
+    /* The ages are not in the snapshot (they would cost 256 KB per tape per slot), so anything
+       stamped after the step just restored describes a future that no longer happened. Clearing
+       those stamps is an approximation: a cell written both before and after the target reads as
+       never written afterwards. It is the smaller lie, and mem_forget_after keeps the
+       cells-written counter consistent with what the arrays now say. */
     {
         uint8_t tt;
         for (tt = 0u; tt < s->tapes; tt++) {
-            uint32_t *wa = mem_write_age(tt);
-            uint32_t *ra = mem_read_age(tt);
-            uint32_t a;
-            for (a = 0u; a < TOS_TAPE_MAX; a++) {
-                if (wa != NULL && wa[a] > s->step) wa[a] = 0u;
-                if (ra != NULL && ra[a] > s->step) ra[a] = 0u;
-            }
+            mem_forget_after(tt, s->step);
         }
     }
 

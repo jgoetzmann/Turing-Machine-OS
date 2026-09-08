@@ -116,7 +116,7 @@ The table above is checked against the kernel's own (`tests/docs/test_fsm_table.
 Runs at most `max_steps` instructions. One instruction is one `cpu_step` is one step; syscalls do not count as steps.
 
 - **SHELL / RUNNING.** Refresh `io_in_ports[2..5]`; check `KBP_PC`; push `TR_FETCH`; `cpu_step`. If the CPU latched an `OUT`: port 1 → `resume_state = state`, enter SYSCALL (transition 1 or 4); port 2 → `mem_select_tape(A)`, push `TR_TAPE`; other ports are ignored. Then: `mem_fault()` set → HALT with that reason (9 or 10); CPU halted in SHELL → HALT with `TOS_HALT_COMMAND` (9); CPU halted in RUNNING → reload the shell blob, `cpu_reset`, `PC = 0x0100`, `SP = sp_init`, SHELL (5). Finally drain BIOS output to `hal_con_out`.
-- **SYSCALL.** `r = bios_dispatch(&cpu)`; record `last_syscall`; push `TR_SYSCALL`; check `KBP_SYSCALL`. `BIOS_DONE` → RUNNING if a `RUN` just loaded a program (3, with `SP = sp_init`) else back to `resume_state` (2 or 3). `BIOS_WAIT` → IDLE (6), return `KSTOP_WAIT_INPUT`. `BIOS_VSYNC` → `frame++`, `bios_tick()`, `hal_display(fb)`, `hal_vsync()`, back to `resume_state`, return `KSTOP_VSYNC`. `BIOS_EOF` → HALT with `TOS_HALT_EOF` (11).
+- **SYSCALL.** `r = bios_dispatch(&cpu)`; record `last_syscall`; push `TR_SYSCALL`; check `KBP_SYSCALL`. `BIOS_DONE` → RUNNING if a `RUN` just loaded a program (3, with `SP = sp_init`) else back to `resume_state` (2 or 3). `BIOS_WAIT` → IDLE (6), return `KSTOP_WAIT_INPUT`. `BIOS_VSYNC` → `frame++`, `bios_tick()`, `hal_display(fb)`, back to `resume_state`, return `KSTOP_VSYNC` (the host loop paces the frame; the kernel does not sleep). `BIOS_EOF` → HALT with `TOS_HALT_EOF` (11).
 - **IDLE.** If `hal_con_in_ready()` → SYSCALL (7) and continue; otherwise return `KSTOP_WAIT_INPUT` having run 0 steps. EOF while idle → HALT (8).
 - **HALT.** Return `KSTOP_HALT`, 0 steps.
 - Every call ends with `tick++` and `kernel_write_meta`. When `cfg.snap_interval` is non-zero and `steps − last_snapshot_step ≥ snap_interval`, it also runs `snapshot_save` plus the `hal_snapshot` hook.
@@ -138,7 +138,7 @@ A hit sets `bp_hit` and returns `KSTOP_BREAKPOINT`. The machine is **not** halte
 
 ### `kernel_run`
 
-Loops `kernel_step(k, 4096, &n)`. On `KSTOP_WAIT_INPUT` it waits for the HAL (the POSIX HAL blocks on stdin when stdin is a pipe or file, so scripted input never spins); on `KSTOP_VSYNC` it continues; on `KSTOP_HALT` it returns. With `cfg.hz > 0` it sleeps so that `cycles` advance at `hz` per second. `kernel_step` itself never sleeps.
+Loops `kernel_step(k, budget, &n)` with a 4,096-step budget, or about one 60 Hz frame's worth when `cfg.hz > 0`. On `KSTOP_WAIT_INPUT` it waits for the HAL (the POSIX HAL blocks on stdin when stdin is a pipe or file, so scripted input never spins) and restarts its clock afterwards, because waiting for a person is not emulated time; on `KSTOP_VSYNC` it calls `hal_vsync()` to pace the frame; on `KSTOP_HALT` it returns. With `cfg.hz > 0` it sleeps through `hal_sleep_ms` so that `cycles` advance at `hz` per second. `kernel_step` itself never sleeps and never reads a clock: `src/main.c` runs the same loop for the CLI.
 
 ## 6. I/O ports
 

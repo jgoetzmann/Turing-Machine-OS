@@ -159,6 +159,61 @@ static int t_dirty_map_forgets_the_abandoned_future(void) {
     return 0;
 }
 
+static int t_anchor_holds_the_current_timeline(void) {
+    uint8_t prog[5];
+    int i;
+
+    /* kernel_init anchors step 0, and so does the load that follows: both describe step 0, but
+       only the second one is on the timeline the machine is actually running. */
+    ASSERT(tos_create(NULL) == 0);
+    marked_program(0xA1u, prog);
+    ASSERT(tos_load_com(prog, 5u) == 0);
+    ASSERT(tos_lever_set(TOS_LEVER_SNAP_INTERVAL, 50u) == 0);
+    for (i = 0; i < 60; ++i) (void)tos_step(50u);      /* wrap the rotating part of the ring */
+
+    ASSERT(tos_seek(0u) == 0);
+    ASSERT(tos_step(2u) == 2u);
+    ASSERT(cpu()->a == 0xA1u);                          /* the loaded program, not the bare shell */
+    return 0;
+}
+
+static int t_seek_the_anchor_alone_can_satisfy(void) {
+    uint8_t prog[5];
+    uint32_t at_load;
+
+    ASSERT(tos_create(NULL) == 0);
+    marked_program(0xC3u, prog);
+    ASSERT(tos_load_com(prog, 5u) == 0);
+    at_load = tos_steps();
+    (void)tos_step(200u);
+
+    /* The load's own anchor is exactly this state; the seek must not refuse it because the log
+       still lists the load as pending. */
+    ASSERT(tos_seek(at_load) == 0);
+    ASSERT(tos_steps() == at_load);
+    ASSERT(tos_step(2u) == 2u);
+    ASSERT(cpu()->a == 0xC3u);
+    return 0;
+}
+
+static int t_failed_seek_is_silent(void) {
+    uint32_t before;
+    int c;
+
+    /* The boot prints a prompt. A failed seek puts the machine back by replaying those steps, and
+       the host must not see that output a second time. */
+    ASSERT(tos_create(NULL) == 0);
+    (void)tos_step(500u);
+    before = tos_steps();
+    while (tos_con_pop() >= 0) { /* drain what the boot printed */ }
+
+    ASSERT(tos_seek(before + 5000u) == -1);
+    ASSERT(tos_steps() == before);
+    c = tos_con_pop();
+    ASSERT(c < 0);                                      /* nothing was replayed to the console */
+    return 0;
+}
+
 int main(void) {
     TEST("WS1-14: a seek whose program image was recycled refuses instead of loading another", t_recycled_load_slot_is_refused);
     TEST("WS1-14: a seek that cannot reach its target leaves the machine where it was", t_failed_seek_leaves_the_machine_alone);
@@ -166,6 +221,9 @@ int main(void) {
     TEST("WS1-14: a seek does not push the replayed steps into the trace again", t_seek_does_not_duplicate_the_trace);
     TEST("WS1-14: the step-0 anchor outlives the snapshot ring", t_step_zero_anchor_survives_the_ring);
     TEST("WS1-14: the dirty map after a seek describes the restored timeline", t_dirty_map_forgets_the_abandoned_future);
+    TEST("WS1-14: the pinned anchor holds the timeline the machine is on", t_anchor_holds_the_current_timeline);
+    TEST("WS1-14: a seek the load's own anchor satisfies is not refused", t_seek_the_anchor_alone_can_satisfy);
+    TEST("WS1-14: a failed seek does not replay output the host already saw", t_failed_seek_is_silent);
     printf("PASS: test_v2_seek_fidelity\n");
     RUN_ALL_TESTS();
 }

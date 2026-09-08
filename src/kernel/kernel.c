@@ -201,12 +201,18 @@ static int k_bp_access(const kernel_t *k, uint32_t stamp)
 
 /* Watchpoints for the tape accesses a BIOS call made itself (sector DMA, program loading).
  * They carry the step stamp kernel_step set on entry, the same one the instruction arm uses. */
+/* The stamp whose watched accesses have already been reported. A syscall does not advance the
+ * step counter, so the instruction after it carries the same stamp and would otherwise be charged
+ * with the BIOS's own reads and writes a second time. */
+static uint32_t g_bp_reported_stamp = 0u;
+
 static int k_bp_syscall_access(kernel_t *k)
 {
     int hit = k_bp_access(k, g_step_stamp);
 
     if (hit >= 0) {
         k->bp_hit = hit;
+        g_bp_reported_stamp = g_step_stamp;
     }
     return hit;
 }
@@ -415,8 +421,10 @@ void kernel_reset(kernel_t *k)
     kernel_init(k, &c);
 }
 
-/* Take a snapshot when snap_interval steps have gone by since the last one. */
-static void k_maybe_snapshot(kernel_t *k, uint32_t L)
+/* Take a snapshot when snap_interval steps have gone by since the last one. `dump` is set only at
+ * the end of a kernel_step call, where the metadata block has just been rewritten: the host hook
+ * writes tape and metadata together and they have to describe the same instant. */
+static void k_maybe_snapshot(kernel_t *k, uint32_t L, int dump)
 {
     if (k->cfg.snap_interval == 0u ||
         (uint32_t)k->steps - k->last_snapshot_step < k->cfg.snap_interval) {
@@ -424,7 +432,9 @@ static void k_maybe_snapshot(kernel_t *k, uint32_t L)
     }
     k->last_snapshot_step = (uint32_t)k->steps;
     (void)snapshot_save(k);
-    hal_snapshot(mem_raw(), L, mem_raw() + TOS_META_BASE(L), TOS_META_SIZE);
+    if (dump) {
+        hal_snapshot(mem_raw(), L, mem_raw() + TOS_META_BASE(L), TOS_META_SIZE);
+    }
 }
 
 kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
@@ -541,7 +551,7 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
             }
             /* Between two instructions is the only clean place to snapshot, and the interval has
                to hold inside one long kernel_step call too, or it would not bound a seek. */
-            k_maybe_snapshot(k, L);
+            k_maybe_snapshot(k, L, 0);
             pc = k->cpu.pc;
             hit = k_bp_pc(k, pc);
             if (hit >= 0) {
@@ -613,8 +623,9 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
             }
 
             hit = k_bp_access(k, stamp);
-            if (hit >= 0) {
+            if (hit >= 0 && stamp != g_bp_reported_stamp) {
                 k->bp_hit = hit;
+                g_bp_reported_stamp = stamp;
                 bp = 1;
             }
             k_drain_output();
@@ -633,7 +644,7 @@ kernel_stop_t kernel_step(kernel_t *k, uint32_t max_steps, uint32_t *steps_run)
     k->last_stop = (uint8_t)stop;
     k->tick++;
     kernel_write_meta(k);
-    k_maybe_snapshot(k, L);
+    k_maybe_snapshot(k, L, 1);
     if (steps_run != NULL) {
         *steps_run = n;
     }

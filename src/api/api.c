@@ -47,6 +47,7 @@ uint32_t hal_con_push_pending(void);
 typedef struct {
     uint32_t step;      /* k->steps when the input was (last) applied */
     uint32_t tick;      /* k->tick when the input was (last) applied */
+    uint32_t tag;       /* API_KIND_LOAD: which load filled the slot (g_load_next at the time) */
     uint8_t  kind;      /* API_KIND_* */
     uint8_t  value;     /* byte / key mask / load slot */
     uint8_t  pad0;
@@ -180,8 +181,7 @@ static void api_apply(api_input_t *e)
         hal_keys_set(e->value);
     } else if (e->kind == (uint8_t)API_KIND_LOAD) {
         uint32_t slot = e->value % API_LOAD_SLOTS;
-        uint32_t tag = (uint32_t)e->pad0 | ((uint32_t)e->pad1 << 8);
-        if (g_load_len[slot] == 0u || (g_load_serial[slot] & 0xFFFFu) != tag) {
+        if (g_load_len[slot] == 0u || g_load_serial[slot] != e->tag) {
             /* Only the last API_LOAD_SLOTS images are kept. This entry names one that has been
              * overwritten, so replaying it would load a different program: refuse instead. */
             g_replay_broken = 1;
@@ -193,7 +193,7 @@ static void api_apply(api_input_t *e)
 
 /* Record a fresh host input: a pending future (from an earlier seek) is discarded first, since the
  * timeline has just branched. Applies it immediately. */
-static void api_record_tagged(uint8_t kind, uint8_t value, uint16_t tag)
+static void api_record_tagged(uint8_t kind, uint8_t value, uint32_t tag)
 {
     api_input_t *e;
     api_input_t tmp;
@@ -205,16 +205,18 @@ static void api_record_tagged(uint8_t kind, uint8_t value, uint16_t tag)
         /* Log full: the input still reaches the machine, it just cannot be replayed. */
         tmp.kind = kind;
         tmp.value = value;
-        tmp.pad0 = (uint8_t)(tag & 0xFFu);
-        tmp.pad1 = (uint8_t)((tag >> 8) & 0xFFu);
+        tmp.tag = tag;
+        tmp.pad0 = 0u;
+        tmp.pad1 = 0u;
         api_apply(&tmp);
         return;
     }
     e = &g_log[g_log_len];
     e->kind = kind;
     e->value = value;
-    e->pad0 = (uint8_t)(tag & 0xFFu);
-    e->pad1 = (uint8_t)((tag >> 8) & 0xFFu);
+    e->tag = tag;
+    e->pad0 = 0u;
+    e->pad1 = 0u;
     api_apply(e);
     g_log_len++;
     g_replay_pos = g_log_len;
@@ -711,6 +713,15 @@ TOS_EXPORT int tos_seek(uint32_t step)
     while (i < g_log_len) {
         const api_input_t *e = &g_log[i];
         if (e->step > snap_step || (e->step == snap_step && e->tick >= snap_tick)) {
+            /* tos_load_com stores its anchor immediately after applying the entry, at the same
+             * step and tick, so that load is already inside this snapshot: replaying it would
+             * reload the image (and fail if the slot has since been recycled) for nothing.
+             * Console bytes at the same tick still have to be re-pushed, because the HAL's input
+             * queue is not part of a snapshot. */
+            if (e->kind == (uint8_t)API_KIND_LOAD && e->step == snap_step && e->tick == snap_tick) {
+                i++;
+                continue;
+            }
             break;
         }
         i++;
@@ -791,7 +802,7 @@ TOS_EXPORT int tos_load_com(const uint8_t *bytes, uint32_t len)
     g_load_next++;
     memcpy(g_load_img[slot], bytes, len);
     g_load_len[slot] = len;
-    api_record_tagged((uint8_t)API_KIND_LOAD, (uint8_t)slot, (uint16_t)(g_load_serial[slot] & 0xFFFFu));
+    api_record_tagged((uint8_t)API_KIND_LOAD, (uint8_t)slot, g_load_serial[slot]);
     /* Anchor the freshly loaded state so a seek right after the load never has to replay the
      * whole shell session that came before it. */
     g_k.last_snapshot_step = (uint32_t)g_k.steps;

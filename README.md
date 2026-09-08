@@ -14,14 +14,15 @@ and every tape cell change as they happen.
 
 ## Why I built it
 
-A Turing machine is the standard argument that something very simple can compute anything computable,
-and extra tapes add no power to it at all, only speed. That gets stated in a lecture and then never
-built. I wanted to know how much machinery a model that small can actually carry: an 8080 for a head,
-a six-state kernel for the finite control, then a filesystem, a compiler, a shell, and eventually
-Pong, all of it living on one, two or four byte tapes and nothing else.
+Can a Turing machine with a handful of tapes simulate something as large and as complicated as a
+computer? The equivalence is provable, and it gets stated in a lecture and then never built, so this
+is the build. An 8080 for a head, a six-state kernel for the finite control, and on top of that a
+filesystem, four compilers, a shell and eventually Pong, all of it living on one, two or four byte
+tapes and nothing else.
 
-The other half of the question is what the extra tapes buy once a real machine is doing the work.
-The two palindrome checkers in `demos/tm/` measure it. `pal1.tm` uses one tape and takes
+Extra tapes add no computational power to the model, only speed, which makes the tape count the second
+half of the question: what do they buy once a real machine is doing the work? The two palindrome
+checkers in `demos/tm/` measure exactly that. `pal1.tm` uses one tape and takes
 n²/2 + 3n/2 + 1 steps; `pal2.tm` uses two and takes 3n + 3. At n = 64 that is 2,145 steps against 195,
 and underneath, on the emulated 8080, 182,855 instructions against 31,353. Then the head-travel
 odometer reports that giving each Turing-machine tape its own machine tape buys about 1%, because the

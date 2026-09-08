@@ -469,6 +469,9 @@ typedef struct {
 /* Recursive descent costs a C stack frame per nesting level, so the source has to be bounded
    somewhere. 96 levels is far past anything readable and far short of the smallest stack. */
 #define CC_MAX_DEPTH 96
+/* The code generator and the constant folder walk the AST, and a flat "a+a+...+a" chain is one
+   node deep per term without nesting anything, so their bound is about stack frames, not style. */
+#define CC_MAX_AST_DEPTH 1024
 
 static int p_kind(const cc_par_t *p) {
     if (p->pos < 0 || p->pos >= p->ntok) return (int)CC_TOK_EOF;
@@ -791,6 +794,17 @@ static int p_local_decl(cc_par_t *p, cc_token_kind_t type_tok, int want_semi) {
     return node;
 }
 
+/* A statement one level down: a nested block, or the body of an if/while/for/do. Each level costs
+   a parser frame, so the same bound that limits expression nesting limits this. */
+static int p_sub_stmt(cc_par_t *p) {
+    int st;
+    if (p->depth >= CC_MAX_DEPTH) return p_fail(p, p->pos, MSG_NESTING);
+    p->depth++;
+    st = p_stmt(p);
+    p->depth--;
+    return st;
+}
+
 static int p_block(cc_par_t *p) {
     int first = -1, last = -1;
     int block = p_new(p, CC_AST_PROGRAM, p->pos);
@@ -799,7 +813,7 @@ static int p_block(cc_par_t *p) {
     while (p_kind(p) != (int)CC_TOK_RBRACE) {
         int st;
         if (p_kind(p) == (int)CC_TOK_EOF) return p_fail(p, p->pos, MSG_UNEXP);
-        st = p_stmt(p);
+        st = p_sub_stmt(p);
         if (st < 0) return -1;
         if (first < 0) first = st;
         else p->nodes[last].next = st;
@@ -836,7 +850,7 @@ static int p_for(cc_par_t *p) {
         if (step < 0) return -1;
         if (!p_expect(p, CC_TOK_RPAREN)) return -1;
     }
-    body = p_stmt(p);
+    body = p_sub_stmt(p);
     if (body < 0) return -1;
     p->nodes[node].left = init;
     p->nodes[node].right = cond;
@@ -857,12 +871,12 @@ static int p_stmt(cc_par_t *p) {
         cond = p_expr(p);
         if (cond < 0) return -1;
         if (!p_expect(p, CC_TOK_RPAREN)) return -1;
-        then_n = p_stmt(p);
+        then_n = p_sub_stmt(p);
         if (then_n < 0) return -1;
         p->nodes[node].left = cond;
         p->nodes[node].right = then_n;
         if (p_match(p, CC_TOK_KW_ELSE)) {
-            int else_n = p_stmt(p);
+            int else_n = p_sub_stmt(p);
             if (else_n < 0) return -1;
             p->nodes[node].third = else_n;
         }
@@ -877,7 +891,7 @@ static int p_stmt(cc_par_t *p) {
         cond = p_expr(p);
         if (cond < 0) return -1;
         if (!p_expect(p, CC_TOK_RPAREN)) return -1;
-        body = p_stmt(p);
+        body = p_sub_stmt(p);
         if (body < 0) return -1;
         p->nodes[node].left = cond;
         p->nodes[node].right = body;
@@ -888,7 +902,7 @@ static int p_stmt(cc_par_t *p) {
         int cond, body;
         if (node < 0) return -1;
         p->pos++;
-        body = p_stmt(p);
+        body = p_sub_stmt(p);
         if (body < 0) return -1;
         if (!p_expect(p, CC_TOK_KW_WHILE)) return -1;
         if (!p_expect(p, CC_TOK_LPAREN)) return -1;
@@ -1360,7 +1374,19 @@ static int32_t wrap16(int32_t v) {
     return v;
 }
 
+static int const_eval_inner(int idx, int32_t *out);
+
 static int const_eval(int idx, int32_t *out) {
+    int ok;
+    if (idx < 0 || idx >= G.nnodes) return 0;
+    if (G.expr_depth >= CC_MAX_AST_DEPTH) return 0;   /* too deep to fold: let codegen report it */
+    G.expr_depth++;
+    ok = const_eval_inner(idx, out);
+    G.expr_depth--;
+    return ok;
+}
+
+static int const_eval_inner(int idx, int32_t *out) {
     const cc_ast_node_t *n;
     int32_t a, b;
     if (idx < 0 || idx >= G.nnodes) return 0;
@@ -2368,7 +2394,7 @@ static void gen_logical(int idx) {
 
 static void gen_expr(int idx) {
     if (G.failed) return;
-    if (G.expr_depth >= CC_MAX_DEPTH) {
+    if (G.expr_depth >= CC_MAX_AST_DEPTH) {
         cg_err_node(idx, MSG_NESTING, NULL);
         return;
     }

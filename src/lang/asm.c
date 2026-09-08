@@ -600,9 +600,7 @@ static int parse_listing(char *line, char **rest, uint8_t *bytes, int *nbytes, u
     if (!(c_xdigit((unsigned char)p[0]) && c_xdigit((unsigned char)p[1]) &&
           c_xdigit((unsigned char)p[2]) && c_xdigit((unsigned char)p[3]) && p[4] == ':'))
         return 0;
-    /* A disassembly listing always puts a single space after the address; a source label may be
-       followed by a tab, and "FACE:\tDB 1,2,3" must stay a label plus a directive. */
-    if (!(p[5] == ' ' || p[5] == 0)) return 0;
+    if (!(p[5] == ' ' || p[5] == '\t' || p[5] == 0)) return 0;
     for (i = 0; i < 4; i++) a = a * 16u + (uint32_t)c_xval((unsigned char)p[i]);
 
     q = p + 5;
@@ -614,9 +612,15 @@ static int parse_listing(char *line, char **rest, uint8_t *bytes, int *nbytes, u
         if (*q == ' ' && q[1] != ' ' && q[1] != '\t' && q[1] != 0) { q++; continue; }
         break;
     }
-    /* The byte column of a listing is separated from the mnemonic by two or more spaces. Without
-       that rule "FACE: DB 1,2,3" reads as address FACE holding the single byte DBH. */
-    if (nb > 0 && !(*q == 0 || (q[0] == ' ' && q[1] == ' '))) return 0;
+    /* Every line build/disasm writes carries a mnemonic after the byte column, and a mnemonic
+       starts with a letter. Requiring that is what keeps a source label out of this path: without
+       it "FACE: DB 1,2,3" reads as the address FACEH holding the byte DBH, and "FACE: DB 12" as
+       that address holding two bytes. Both are a label and a DB directive. */
+    if (nb > 0) {
+        const char *m = q;
+        while (*m == ' ' || *m == '\t') m++;
+        if (!c_alpha((unsigned char)*m)) return 0;
+    }
     if (nb == 0 && !c_digit((unsigned char)p[0])) return 0;   /* it is a label like DEAD: */
     if (nb == 0) {
         /* unknown byte formatting: skip to just past the first double space, if any */

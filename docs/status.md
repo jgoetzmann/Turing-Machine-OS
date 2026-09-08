@@ -29,7 +29,7 @@ The compilers are ROM services by design (`decisions.md` A7, `languages.md`); a 
 ## Tests
 
 - `make test` builds everything and runs `tests/run_tests.sh`: every `tests/**/test_*.c` compiled standalone against `build/libtos.a`, plus every `tests/**/*.sh`. It prints `PASS: <name>` per test and `N/N passed` at the end, and exits non-zero on any failure.
-- `make test` runs 81 tests (42 C files and 39 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 55 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
+- `make test` runs 83 tests (43 C files and 40 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 57 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
 - `make test-web` runs `web/test/*.test.mjs` with `node --test` against the real wasm: boot, a shell session (`dir`, `cc`, `run`, `halt`), every demo's `.expected` output, and `layout.json` against the wasm's actual struct offsets.
 - `make test-e2e` builds the site and drives it with Cypress: the thirteen panels mount and draw, the toolbar
   runs, steps, resets and reports, breakpoints fire, time travel seeks, the levers rebuild the machine without
@@ -47,7 +47,7 @@ Coverage by area (behavior ids from the spec):
 | Languages | assembler encodings and errors (WS7-01), TM errors (WS7-02), BF errors (WS7-03), Busy Beavers and increment vs `tm_ref.py` (WS6-04), palindrome travel ratio (WS6-05), asm round-trip (WS6-07), BF on tape 1 (WS6-08) |
 | Demos | `hello/*` outputs with no `puts` shortcuts (WS1-12, WS2-04, WS5-10), Pong frames and size (WS6-02), Life golden frame (WS6-03), fault at 32K (WS6-09), Forth (WS7-04), shell self-compile (WS6-06), the demo shell session under Node (WS2-05) |
 | Web | panel modules exist (WS3-01), URL state, disassembly view and speed helpers under `node --test` (WS3-02…06), the panels and controls themselves under Cypress, content slugs (WS8-02), Pages workflow (WS8-01) |
-| Docs / repo | constants block matches `dump_constants` (WS0-02), `CLAUDE.md` (WS0-05), README (WS0-06), CI (WS0-09), no second visualizer (WS9-01) |
+| Docs / repo | constants block matches `dump_constants` and the transitions table matches the kernel's own table (WS0-02, WS1-06), `CLAUDE.md` (WS0-05), README (WS0-06), CI (WS0-09), no second visualizer (WS9-01) |
 
 ## Known limits
 

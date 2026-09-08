@@ -2,8 +2,10 @@
  *
  * Every one of the 256 opcodes is decoded. The undocumented aliases behave
  * as their documented twins:
- *   0x08,0x10,0x18,0x28,0x38 -> NOP ; 0xCB -> JMP ; 0xD9 -> RET ;
- *   0xDD,0xED,0xFD -> CALL.  0x20 = RIM, 0x30 = SIM (8085 flag storage only).
+ *   0x08,0x10,0x18,0x20,0x28,0x30,0x38 -> NOP ; 0xCB -> JMP ; 0xD9 -> RET ;
+ *   0xDD,0xED,0xFD -> CALL.  0x20 and 0x30 are the 8085's RIM and SIM; on an
+ *   8080 they are NOPs (SPEC WS1-05, decisions.md B24), and rim_value /
+ *   sim_value are storage nothing reaches.
  *
  * Memory goes through mem_read/mem_write (src/emu/mem.c). I/O: IN reads
  * cpu->io_in_ports[port]; OUT latches port/value into io_out_* and raises

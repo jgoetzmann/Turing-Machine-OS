@@ -724,7 +724,9 @@ TOS_EXPORT int tos_seek(uint32_t step)
     }
     g_replaying = 1;
     g_replay_broken = 0;
-    g_replay_seen_upto = from_step;
+    /* Output is suppressed for steps the host has already seen. When a failed seek is putting the
+     * machine back, every step up to the target is such a step. */
+    g_replay_seen_upto = g_seek_restoring ? step : from_step;
     while ((uint32_t)g_k.steps < step && g_k.state != KS_HALT) {
         uint32_t before = (uint32_t)g_k.steps;
         uint32_t n = 0u;

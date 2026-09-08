@@ -238,8 +238,7 @@ static void svc_write(cpu_t *cpu) {
         cpu->a = 1u;
         return;
     }
-    fs_flush();     /* write-through, like the compile path: the image on the host stays current */
-    cpu->a = 0u;
+    cpu->a = 0u;    /* the image is dirty; the host writes it out at exit (src/main.c) */
 }
 
 static void svc_listdir(void) {

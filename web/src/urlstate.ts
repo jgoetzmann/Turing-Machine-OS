@@ -2,7 +2,7 @@
  *
  * Hash shape (spec S9):
  *   #/playground?demo=<name>&tapes=1|2|4&len=32768|49152|65536&hz=0|N&seed=N
- *               &input=console|keys&disks=1|2&trace=0|1&speed=<steps per second|max>
+ *               &input=console|keys&disks=1|2&trace=0|1&snap=N&speed=<steps per second|max>
  *               &bp=<kind:lo:hi,...>
  * Keys equal to their default are omitted by formatHash; parseHash tolerates any order,
  * a missing '#', a missing '/playground' prefix, hex numbers (0x..) and numeric breakpoint kinds.
@@ -31,6 +31,8 @@ export interface PlaygroundState {
   input: InputMode;
   disks: Disks;
   trace: boolean;
+  /** Steps between automatic snapshots (TOS_LEVER_SNAP_INTERVAL); 0 = never. */
+  snap: number;
   speed: Speed;
   bp: Breakpoint[];
 }
@@ -48,6 +50,7 @@ export function defaultState(): PlaygroundState {
     input: 'console',
     disks: 1,
     trace: true,
+    snap: 1000,
     speed: 'max',
     bp: [],
   };
@@ -147,6 +150,8 @@ export function parseHash(hash: string): PlaygroundState {
     if (t === '0' || t === 'false' || t === 'off') state.trace = false;
     else if (t === '1' || t === 'true' || t === 'on') state.trace = true;
   }
+  const snap = parseNumber(kv.snap);
+  if (snap !== null && snap >= 0) state.snap = Math.min(snap, 0xffffffff);
   const speed = parseSpeedValue(kv.speed);
   if (speed !== null) state.speed = speed;
   state.bp = parseBreakpoints(kv.bp);
@@ -165,6 +170,7 @@ export function formatHash(state: PlaygroundState): string {
   if (state.input !== d.input) parts.push(`input=${state.input}`);
   if (state.disks !== d.disks) parts.push(`disks=${state.disks}`);
   if (state.trace !== d.trace) parts.push(`trace=${state.trace ? 1 : 0}`);
+  if (state.snap !== d.snap) parts.push(`snap=${state.snap}`);
   if (state.speed !== d.speed) parts.push(`speed=${state.speed}`);
   if (state.bp.length > 0) parts.push(`bp=${formatBreakpoints(state.bp)}`);
   return parts.length ? `${PLAYGROUND_PATH}?${parts.join('&')}` : PLAYGROUND_PATH;
@@ -179,6 +185,7 @@ export function stateToConfig(state: PlaygroundState): {
   inputMode: 0 | 1;
   disks: Disks;
   trace: boolean;
+  snapInterval: number;
 } {
   return {
     tapes: state.tapes,
@@ -188,6 +195,7 @@ export function stateToConfig(state: PlaygroundState): {
     inputMode: state.input === 'keys' ? 1 : 0,
     disks: state.disks,
     trace: state.trace,
+    snapInterval: state.snap,
   };
 }
 

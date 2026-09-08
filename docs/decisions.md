@@ -332,11 +332,21 @@ One entry per decision: **Context → Decision → Consequences → Alternatives
 
 **Context.** The compiler segfaulted on deeply nested expressions (550 nested calls was enough), read past a 16 KB buffer when a string literal was longer than the buffer it decoded into, accepted calls with the wrong number of arguments (the callee then read its parameters from a frame that did not match), and silently dropped the initialiser of an `__at` variable.
 
-**Decision.** Expressions nest at most 96 deep in the parser and the code generator, reported as `expression nests too deeply`. A call whose argument count differs from the declaration is `wrong number of arguments`. An `__at` variable with an initialiser is `__at variables cannot have an initialiser`, because it names memory the image does not contain. The string copy is clamped to the buffer that was actually written.
+**Decision.** Expressions and statements nest at most 96 deep in the parser, and the code generator and the constant folder walk at most 1,024 AST levels, so a flat chain of a thousand operands still compiles while a runaway one stops. All of it is reported as `expression nests too deeply`. A call whose argument count differs from the declaration is `wrong number of arguments`. An `__at` variable with an initialiser is `__at variables cannot have an initialiser`, because it names memory the image does not contain. The string copy is clamped to the buffer that was actually written.
 
 **Consequences.** Three new diagnostics, all with the usual `file:line:col: message` shape, documented in `tiny-c.md`. Nothing that compiled before compiles differently.
 
 **Alternatives rejected.** Growing the parser's stack (the limit moves, it does not go away); honouring `__at` initialisers with a startup stub (an image whose data is written by code the user did not ask for).
+
+### B29. Each undocumented alias byte spells itself, so a listing re-assembles exactly
+
+**Context.** `disasm.h` promised a trailing `*` for the undocumented aliases, and `asm.md` promised that a disassembly listing re-assembles to identical bytes. Both could not be true: five bytes printed as `NOP*` and three as `CALL*`, and the assembler encoded those as `08` and `DD`. The round trip only held by luck, when no alias byte happened to land on an instruction boundary; a space character (`20H`) inside a string was enough to break it.
+
+**Decision.** Where one alias covers several bytes, the byte joins the spelling: `NOP*`, `NOP*10`, `NOP*18`, `NOP*20`, `NOP*28`, `NOP*30`, `NOP*38`, `JMP*`, `RET*`, `CALL*`, `CALL*ED`, `CALL*FD`. The assembler accepts all of them. `08H` keeps the bare `NOP*` and `DDH` the bare `CALL*`, so the spec's own example (`{0x08}` → `NOP*`) still holds.
+
+**Consequences.** Disassembling any 256-opcode image and re-assembling the listing gives back the same bytes, which `tests/integration/v2_ws6_07_asm.sh` now checks over `shell.com` without stripping anything. The comment in the frozen `disasm.h` was updated to match; the mnemonics themselves are new spellings, not a changed format.
+
+**Alternatives rejected.** Qualifying the claim in `asm.md` instead (the round trip is the point of having a disassembler in a machine that assembles); making the assembler infer the byte from context (there is no context).
 
 ## Part C: pitfalls worth remembering (from the old `remember.md`)
 

@@ -15,7 +15,7 @@ A lever changes the *machine*, not the picture of it. Every lever has a C API (`
 | 4 | `INPUT_MODE` | view | 0 console, 1 keys | 0 | `--input=console\|keys` | `input=console\|keys` | 0x35 |
 | 5 | `DISKS` | machine | 1, 2 | 1 | `--disks=N`, `--disk-b=` | `disks=` | 0x36 |
 | 6 | `TRACE` | view | 0, 1 | 1 in the browser, 0 native | `--trace` | `trace=` | 0x37 |
-| 7 | `SNAP_INTERVAL` | view | steps between snapshots, 0 = never | 1000 | `--snap=N` (`--snap-dir=` also dumps each one) | — | — |
+| 7 | `SNAP_INTERVAL` | view | steps between snapshots, 0 = never | 1000 | `--snap=N` (`--snap-dir=` also dumps each one) | `snap=N` | — |
 
 `tos_lever_set(id, value)` returns 0 or −1 for a bad id or out-of-range value. `tos_lever_get(id)` reads the current value. The `Engine` class exposes them as `leverSet(id, value)` / `leverGet(id)` with `LEVER.TAPES … LEVER.SNAP_INTERVAL`. `kernel_config_default` (native) is 1 tape, 64K, hz 0, seed 1, console, 1 disk, trace off, snapshots every 1000 steps; `Engine.create` (browser) is the same with trace on.
 
@@ -86,7 +86,7 @@ Tests: WS1-10.
 
 ```
 #/playground?demo=<name>&tapes=1|2|4&len=32768|49152|65536&hz=0|N&seed=N
-            &input=console|keys&disks=1|2&trace=0|1&speed=<steps/s|max>&bp=<kind:lo:hi,...>
+            &input=console|keys&disks=1|2&trace=0|1&snap=N&speed=<steps/s|max>&bp=<kind:lo:hi,...>
 ```
 
 `web/src/urlstate.ts` parses and formats it (`parseHash` / `formatHash`); the Levers panel rewrites the hash whenever a lever moves, so a URL is a complete description of a machine configuration.

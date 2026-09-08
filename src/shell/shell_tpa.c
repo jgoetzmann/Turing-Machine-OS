@@ -288,7 +288,10 @@ int sh_dispatch(void) {
 }
 
 int main(void) {
+    /* The shell is reloaded whenever a program ends, so re-select disk A here: otherwise the
+       prompt reads A> while the filesystem is still pointed at B. */
     sh_disk = 0;
+    seldisk(0);
     while (1) {
         putchar('A' + sh_disk);
         putchar('>');

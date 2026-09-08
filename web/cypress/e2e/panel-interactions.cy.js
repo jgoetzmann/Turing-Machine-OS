@@ -94,6 +94,14 @@ describe('panel interactions', () => {
     cy.hash().should('not.contain', 'trace=0');
   });
 
+  it('the snapshot interval travels in the URL and reaches the machine', () => {
+    cy.visit('#/playground?snap=200');
+    cy.get('[data-out="status"]', { timeout: 60000 }).should('contain', 'step');
+    cy.get('#panel-levers [data-lever="7"]').should('have.value', '200');
+    cy.get('#panel-levers [data-lever="7"]').clear().type('400').blur();
+    cy.hash().should('contain', 'snap=400');
+  });
+
   it('the levers panel clear-breakpoints button empties the toolbar list', () => {
     cy.get('[data-ctl="bp-lo"]').clear().type('0100');
     cy.get('[data-form="bp"] button[type="submit"]').click();

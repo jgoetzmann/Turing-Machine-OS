@@ -128,6 +128,7 @@ export class App {
   private _lastEventAt = 0;
   private startState = 0;
   private syscallMark = 0;
+  private notedWaiting = false;
   private booted = false;
 
   private panels = new Map<PanelName, Panel>();
@@ -340,6 +341,7 @@ export class App {
   // ---- input ---------------------------------------------------------------
 
   pushConsole(text: string): void {
+    this.notedWaiting = false;
     this.engine.conPush(text);
   }
 
@@ -437,6 +439,7 @@ export class App {
     s.input = cfg.inputMode === 1 ? 'keys' : 'console';
     s.disks = cfg.disks;
     s.trace = cfg.trace;
+    s.snap = cfg.snapInterval;
     s.speed = this._speed;
     s.bp = this._bps.map((b) => ({ ...b }));
     return s;
@@ -458,7 +461,7 @@ export class App {
       if (machineChanged) {
         const imgs = this.snapshotDisks();
         this.resetting = true;
-        this.engine.create({ ...want, snapInterval: cur.snapInterval || 1000 });
+        this.engine.create({ ...want });
         this.resetting = false;
         this.restoreDisks(imgs);
         this.booted = true;
@@ -466,6 +469,7 @@ export class App {
         if (want.hz !== cur.hz) this.engine.leverSet(LEVER.HZ, want.hz);
         if (want.inputMode !== cur.inputMode) this.engine.leverSet(LEVER.INPUT_MODE, want.inputMode);
         if (want.trace !== cur.trace) this.engine.leverSet(LEVER.TRACE, want.trace ? 1 : 0);
+        if (want.snapInterval !== cur.snapInterval) this.engine.leverSet(LEVER.SNAP_INTERVAL, want.snapInterval);
         this.resetMachine();
       }
       this._bps = [];
@@ -700,10 +704,11 @@ export class App {
         return false;
       case STOP.WAIT_INPUT:
         this.hzAcc = 0;
-        // A targeted run (step over, run to halt, run to a state change) cannot reach its target
-        // while the machine is parked at a CONIN, so hand control back instead of spinning.
-        if (this._mode !== 'run' && this._mode !== 'paused') {
-          this.setMode('paused');
+        // A targeted run (step over, run to halt, run to a state change) stays armed: the target
+        // usually arrives with the next command the user types. Say once that it is waiting, so a
+        // button that looks stuck explains itself.
+        if (this._mode !== 'run' && this._mode !== 'paused' && !this.notedWaiting) {
+          this.notedWaiting = true;
           this.note('Waiting for input: type a command in the Console panel');
         }
         return false;
@@ -725,6 +730,7 @@ export class App {
 
   private setMode(mode: RunMode): void {
     if (this._mode === mode) return;
+    this.notedWaiting = false;
     const wasRunning = this._mode !== 'paused';
     this._mode = mode;
     const nowRunning = mode !== 'paused';

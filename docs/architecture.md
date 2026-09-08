@@ -109,7 +109,7 @@ A k-tape machine has one control and k tapes. Only the banked window exists once
 | 10 | RUNNING → HALT | tape fault |
 | 11 | SYSCALL → HALT | console EOF |
 
-Every transition increments `transition_counts[#]`, pushes a `TR_STATE` trace event, and is a candidate for a `KBP_STATE` breakpoint. `tos_transition_from/to/why/fired(i)` expose the table and its counters; the visualizer's FSM panel is drawn from them. A boot followed by the `halt` command fires 0, 1, 2 and 9 and never 3, 4 or 5.
+The table above is checked against the kernel's own (`tests/docs/test_fsm_table.c`): rewording the last column is free, renumbering or re-pointing a transition is not. Every transition increments `transition_counts[#]`, pushes a `TR_STATE` trace event, and is a candidate for a `KBP_STATE` breakpoint. `tos_transition_from/to/why/fired(i)` expose the table and its counters; the visualizer's FSM panel is drawn from them. A boot followed by the `halt` command fires 0, 1, 2 and 9 and never 3, 4 or 5.
 
 ### `kernel_step(k, max_steps, &steps_run)`
 
@@ -166,7 +166,7 @@ Arguments travel in `C` and `DE`; results come back in `A`. Console output goes 
 | 0x06 | VSYNC | — | — | `BIOS_VSYNC`: the kernel bumps `frame`, renders the display, returns `KSTOP_VSYNC`. |
 | 0x07 | RAND | — | A = next PRNG byte | 8-bit xorshift (`x ^= x<<3; x ^= x>>5; x ^= x<<1`), seeded by the SEED lever; seed 0 acts as 1. The cycle is 17 values long. |
 | 0x08 | TICKS | — | A = frame count & 0xFF | Counts VSYNC frames, never wall-clock time. |
-| 0x09 | SELDISK | C = 0/1 | — | `fs_select_disk`. |
+| 0x09 | SELDISK | C = 0/1 | A = 0 selected, 1 no such disk | `fs_select_disk`. The tiny-C `seldisk(n)` intrinsic returns that status. |
 | 0x0A | SETTRK | C = track | — | 0-based. |
 | 0x0B | SETSEC | C = sector | — | 1-based. |
 | 0x0C | SETDMA | DE = address | — | Default `TOS_DMA_DEFAULT(L)` = scratch base. |

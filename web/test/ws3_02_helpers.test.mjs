@@ -103,13 +103,13 @@ test('WS3-04: stepsForFrame scales with the frame time and is unbounded at max',
 test('WS3-05: the URL hash round-trips levers, demo, speed and breakpoints', () => {
   const state = {
     demo: 'pong', tapes: 4, len: 32768, hz: 2000000, seed: 7,
-    input: 'keys', disks: 2, trace: false, speed: 5000,
+    input: 'keys', disks: 2, trace: false, snap: 250, speed: 5000,
     bp: [{ kind: 0, lo: 0x0100, hi: 0x0100 }, { kind: 2, lo: 0x4000, hi: 0x40ff }],
   };
   const [hash] = values('urlstate.ts', [['formatHash', state]]);
   assert.ok(hash.startsWith('#/playground'), hash);
   const [back] = values('urlstate.ts', [['parseHash', hash]]);
-  for (const k of ['demo', 'tapes', 'len', 'hz', 'seed', 'input', 'disks', 'trace', 'speed']) {
+  for (const k of ['demo', 'tapes', 'len', 'hz', 'seed', 'input', 'disks', 'trace', 'snap', 'speed']) {
     assert.deepEqual(back[k], state[k], `${k} survived the round trip (${hash})`);
   }
   assert.deepEqual(back.bp, state.bp);
@@ -138,10 +138,11 @@ test('WS3-03: breakpoints in the URL are decimal and survive both directions', (
 test('WS3-06: stateToConfig hands the machine levers to the engine unchanged', () => {
   const [cfg] = values('urlstate.ts', [['stateToConfig', {
     demo: null, tapes: 2, len: 49152, hz: 0, seed: 3,
-    input: 'keys', disks: 2, trace: true, speed: 'max', bp: [],
+    input: 'keys', disks: 2, trace: true, snap: 500, speed: 'max', bp: [],
   }]]);
   assert.equal(cfg.tapes, 2);
   assert.equal(cfg.tapeLen, 49152);
   assert.equal(cfg.seed, 3);
   assert.equal(cfg.disks, 2);
+  assert.equal(cfg.snapInterval, 500);
 });

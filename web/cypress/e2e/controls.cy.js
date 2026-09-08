@@ -41,6 +41,15 @@ describe('execution controls', () => {
     }
   });
 
+  it('a targeted run stays armed while the machine waits for a command', () => {
+    // Run to HALT at the prompt: the target arrives with the next thing the user types.
+    cy.get('[data-act="to-halt"]').click();
+    cy.get('[data-out="status"]').should('contain', 'Waiting for input');
+    cy.get('[data-act="toggle"]').should('have.text', 'Pause');
+    cy.get('#panel-console input[type="text"]').type('halt{enter}');
+    cy.get('[data-out="status"]', { timeout: 30000 }).should('contain', 'Machine halted');
+  });
+
   it('step over syscall, run to halt and run to state change all report what they did', () => {
     cy.get('[data-act="toggle"]').click();
     cy.get('#panel-console input[type="text"]').type('dir{enter}');

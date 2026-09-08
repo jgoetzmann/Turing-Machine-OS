@@ -5,6 +5,7 @@
  * Every byte of output goes through the HAL (no stdio here). The exit line is
  * "TuringOS halted (reason=<NAME>) after <N> steps\n" and the exit code is 0. */
 #include "api/api.h"
+#include "fs/fs.h"
 #include "hal/hal.h"
 #include "kernel/kernel.h"
 #include "tos.h"
@@ -286,6 +287,9 @@ int main(int argc, char **argv)
         }
     }
 
+    /* Sector writes and anything else that dirtied a disk image reach the host here, once,
+     * rather than rewriting half a megabyte per sector. */
+    fs_flush();
     hal_shutdown();
     /* The exit line always starts on its own line. Only the `halt` command is known to have
      * left the cursor at a line start ("HALT\n"); EOF and faults usually interrupt a prompt. */

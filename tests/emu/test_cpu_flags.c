@@ -83,6 +83,49 @@ int main(void) {
         return 1;
     }
 
+    /* ANA takes AC from bit 3 of either operand (the 8080 rule; the 8085 always sets it), so a
+       pair with bit 3 clear in both must leave AC clear. */
+    cpu.a = 0x01u;
+    cpu.b = 0x01u;
+    cpu.pc = 0x0090u;
+    mem_write(0x0090u, 0xA0u); /* ANA B */
+    cpu_step(&cpu);
+    assert_u8("ANA result", 0x01u, cpu.a);
+    if ((cpu.flags & FLAG_AC) != 0u) {
+        fprintf(stderr, "FAIL: ANA of two operands without bit 3 must leave AC clear\n");
+        return 1;
+    }
+    cpu.a = 0x08u;
+    cpu.b = 0x00u;
+    cpu.pc = 0x0092u;
+    mem_write(0x0092u, 0xA0u); /* ANA B */
+    cpu_step(&cpu);
+    if ((cpu.flags & FLAG_AC) == 0u) {
+        fprintf(stderr, "FAIL: ANA with bit 3 set in one operand must set AC\n");
+        return 1;
+    }
+
+    /* DCR is r + 0FFH: AC is set unless the low nibble was already zero. */
+    cpu.b = 0x11u;
+    cpu.pc = 0x0094u;
+    mem_write(0x0094u, 0x05u); /* DCR B */
+    cpu_step(&cpu);
+    assert_u8("DCR result", 0x10u, cpu.b);
+    if ((cpu.flags & FLAG_AC) == 0u) {
+        fprintf(stderr, "FAIL: DCR of a value with a non-zero low nibble must set AC\n");
+        return 1;
+    }
+    cpu.b = 0x10u;
+    cpu.pc = 0x0096u;
+    mem_write(0x0096u, 0x05u); /* DCR B */
+    cpu_step(&cpu);
+    assert_u8("DCR borrow result", 0x0Fu, cpu.b);
+    if ((cpu.flags & FLAG_AC) != 0u) {
+        fprintf(stderr, "FAIL: DCR that borrows from bit 4 must leave AC clear\n");
+        return 1;
+    }
+    cpu.pc = 0x000Eu;
+
     /* OR boundary: AC clear, CY clear, S set for 0x80 */
     mem_write(0x000Eu, 0x3Eu); /* MVI A,0x00 */
     mem_write(0x000Fu, 0x00u);

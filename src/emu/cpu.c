@@ -225,8 +225,9 @@ static void alu_add(cpu_t *cpu, uint8_t v, uint8_t carry_in) {
 /* The 8080 subtracts by adding the two's complement: A + ~v + !borrow. AC is the carry out of
    bit 3 of that addition, so it is SET when there is no borrow from bit 4. */
 static int sub_ac(uint8_t a, uint8_t v, uint8_t borrow_in) {
-    return (int)(((uint16_t)(a & 0x0Fu) + (uint16_t)((uint8_t)~v & 0x0Fu) +
-                  (uint16_t)(borrow_in ? 0u : 1u)) > 0x0Fu);
+    const unsigned int lo = (unsigned int)(a & 0x0Fu) + (unsigned int)((uint8_t)~v & 0x0Fu) +
+                            (unsigned int)(borrow_in ? 0u : 1u);   /* + !borrow */
+    return (lo > 0x0Fu) ? 1 : 0;
 }
 
 static void alu_sub(cpu_t *cpu, uint8_t v, uint8_t borrow_in) {

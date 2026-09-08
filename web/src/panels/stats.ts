@@ -99,7 +99,7 @@ export function createStatsPanel(root: HTMLElement, engine: Engine, bus: Bus): P
     histBody.replaceChildren();
     if (counts.size === 0) {
       const traceOn = engine.config && engine.config.trace;
-      histBody.append(el('div', 'none', traceOn ? 'no syscalls yet' : 'trace lever is off — enable it to count syscalls'));
+      histBody.append(el('div', 'none', traceOn ? 'no syscalls yet' : 'trace lever is off: enable it to count syscalls'));
       return;
     }
     const rows = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 14);

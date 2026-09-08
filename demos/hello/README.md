@@ -1,6 +1,6 @@
 # Hello: six small console programs
 
-Six tiny-C programs that exercise the console path end to end: `cc` compiles
+Six tiny-C programs exercise the console path end to end: `cc` compiles
 them on the host side of the ROM boundary, `run` loads the `.com` at `0x0100`,
 and every character leaves through BIOS `CONOUT` (`OUT 1` with A=2).
 

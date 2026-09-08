@@ -1,6 +1,6 @@
 # Tiny-C
 
-Tiny-C is the C subset that TuringOS programs, its demos and its own shell are written in. The compiler (`src/compiler/compiler.c`) is host code — a "ROM service" reached through BIOS 0x16 (`cc F` in the shell), the `build/cc_driver` CLI, `tos_compile(TOS_LANG_C, …)` and the playground editor. Its output is a plain `.com` image that runs on the emulated 8080.
+Tiny-C is the C subset that TuringOS programs, its demos and its own shell are written in. The compiler (`src/compiler/compiler.c`) is host code, a "ROM service" reached through BIOS 0x16 (`cc F` in the shell), the `build/cc_driver` CLI, `tos_compile(TOS_LANG_C, …)` and the playground editor. Its output is a plain `.com` image that runs on the emulated 8080.
 
 ## Grammar
 
@@ -106,7 +106,7 @@ Key bits for `keys()`: W 1, S 2, UP 4, DOWN 8, SPACE 16, ESC 32, ENTER 64, ANY 1
 - Output ≤ 16,128 bytes (the TPA). Source ≤ 32,768 bytes. At most 256 globals and 64 functions. Expressions nest
   at most 96 deep; past that the compiler stops with `expression nests too deeply` rather than running out of
   its own stack.
-- `&&` / `||` intermediates are kept in registers and on the stack — there is no fixed scratch address, so a program larger than 8 KB whose code crosses `0x20FC` is safe (WS1-13).
+- `&&` / `||` intermediates are kept in registers and on the stack: there is no fixed scratch address, so a program larger than 8 KB whose code crosses `0x20FC` is safe (WS1-13).
 
 ## Diagnostics
 

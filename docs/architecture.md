@@ -20,7 +20,7 @@ Where it is *not* a pure Turing machine, on purpose:
 - A BIOS syscall does in one transition what a formal machine would spend thousands on (reading a directory, compiling a file). The machine sees each syscall as one visible `OUT 01H` instruction.
 - The console, keys and disks are an environment. A formal TM has none; here it is the only thing the machine cannot compute by itself.
 
-`decisions.md` A1 and B4–B6 record why each of these was chosen.
+`decisions.md` A1 and B4-B6 record why each of these was chosen.
 
 ## 2. Components
 
@@ -39,7 +39,7 @@ Where it is *not* a pure Turing machine, on purpose:
 | `src/shell/shell_tpa.c` | **the 8080** | The command shell, written in tiny-C, compiled to `build/bin/shell.com` and embedded as `tos_shell_blob`. |
 | `demos/**` | **the 8080** | Every demo, including the Forth interpreter, runs inside the emulated machine. |
 
-ROM services are the honest name for the compilers: from the machine's point of view `cc`, `asm`, `tm` and `bf` are fixed functions reached by one `OUT 01H`, like a firmware routine. Everything the user runs — the shell, Forth, every demo, every compiled TM or Brainfuck program — executes on the emulated 8080.
+ROM services are the honest name for the compilers: from the machine's point of view `cc`, `asm`, `tm` and `bf` are fixed functions reached by one `OUT 01H`, like a firmware routine. Everything the user runs (the shell, Forth, every demo, every compiled TM or Brainfuck program) executes on the emulated 8080.
 
 ## 3. Memory map (v2)
 
@@ -66,7 +66,7 @@ Out-of-range accesses: reads return `0xFF`, writes are dropped, `mem_fault()` be
 
 A k-tape machine has one control and k tapes. Only the banked window exists once per tape; the BIOS vectors, TPA, scratch, stack, display and metadata are common (they always resolve to tape 0). This is the CP/M 3 "common area" arrangement, and it means a program's code and stack never vanish under the PC when the selection changes.
 
-- `OUT 02H` with A = n selects tape n for every access — fetch and data — inside the window. n ≥ k halts with `TOS_HALT_BAD_TAPE` (6).
+- `OUT 02H` with A = n selects tape n for every access (fetch and data) inside the window. n ≥ k halts with `TOS_HALT_BAD_TAPE` (6).
 - `IN 02H` reads the selection back; `IN 04H` reads k.
 - Boot and `RUN` reset the selection to 0.
 - `mem_peek`/`mem_poke` and the `tos_tape_ptr(i)` views address a specific tape directly; the visualizer shows k stacked strips.
@@ -119,7 +119,7 @@ Runs at most `max_steps` instructions. One instruction is one `cpu_step` is one 
 - **SYSCALL.** `r = bios_dispatch(&cpu)`; record `last_syscall`; push `TR_SYSCALL`; check `KBP_SYSCALL`. `BIOS_DONE` → RUNNING if a `RUN` just loaded a program (3, with `SP = sp_init`) else back to `resume_state` (2 or 3). `BIOS_WAIT` → IDLE (6), return `KSTOP_WAIT_INPUT`. `BIOS_VSYNC` → `frame++`, `bios_tick()`, `hal_display(fb)`, `hal_vsync()`, back to `resume_state`, return `KSTOP_VSYNC`. `BIOS_EOF` → HALT with `TOS_HALT_EOF` (11).
 - **IDLE.** If `hal_con_in_ready()` → SYSCALL (7) and continue; otherwise return `KSTOP_WAIT_INPUT` having run 0 steps. EOF while idle → HALT (8).
 - **HALT.** Return `KSTOP_HALT`, 0 steps.
-- **Every call ends with** `tick++`, `kernel_write_meta`, and — when `cfg.snap_interval` is non-zero and `steps − last_snapshot_step ≥ snap_interval` — `snapshot_save` plus the `hal_snapshot` hook.
+- Every call ends with `tick++` and `kernel_write_meta`. When `cfg.snap_interval` is non-zero and `steps − last_snapshot_step ≥ snap_interval`, it also runs `snapshot_save` plus the `hal_snapshot` hook.
 
 Stop reasons (`kernel_stop_t`, also `tos_stop_reason()`): `KSTOP_BUDGET` 0, `KSTOP_HALT` 1, `KSTOP_WAIT_INPUT` 2, `KSTOP_VSYNC` 3, `KSTOP_BREAKPOINT` 4.
 
@@ -150,7 +150,7 @@ Loops `kernel_step(k, 4096, &n)`. On `KSTOP_WAIT_INPUT` it waits for the HAL (th
 | 0x04 | tape count k | — |
 | 0x05 | `(L / 256) & 0xFF` | — |
 
-The kernel refreshes ports 2–5 before every instruction. Other `OUT` ports are latched by the CPU and ignored by the kernel; other `IN` ports read the CPU's `io_in_ports` table, which the kernel leaves at 0. Port reads are ordinary instructions: they cost one step and appear in the trace, unlike a syscall (`decisions.md` B12).
+The kernel refreshes ports 2-5 before every instruction. Other `OUT` ports are latched by the CPU and ignored by the kernel; other `IN` ports read the CPU's `io_in_ports` table, which the kernel leaves at 0. Port reads are ordinary instructions: they cost one step and appear in the trace, unlike a syscall (`decisions.md` B12).
 
 ## 7. BIOS syscalls (A on `OUT 01H`)
 
@@ -241,10 +241,10 @@ The kernel rewrites this block at the end of every `kernel_step`. It is ordinary
 
 ## 12. The `.com` format and the loader convention
 
-A `.com` file is a header-less 8080 image loaded at `0x0100` with its entry point at byte 0, exactly as under CP/M. Absolute addresses are used throughout — the 8080 has no PC-relative jumps.
+A `.com` file is a header-less 8080 image loaded at `0x0100` with its entry point at byte 0, exactly as under CP/M. Absolute addresses are used throughout: the 8080 has no PC-relative jumps.
 
 - Maximum size 16,128 bytes (the TPA). Larger files are rejected with `?` by `RUN` and `−1` by `tos_load_com`.
-- **The loader sets SP** to `TOS_STACK_TOP(L)` before jumping to `0x0100`; programs and compilers must not emit `LXI SP`. This is what lets one binary run at every tape length (`decisions.md` B6, B14). The value is published at `TOS_META_SP_INIT`.
+- The loader sets SP to `TOS_STACK_TOP(L)` before jumping to `0x0100`; programs and compilers must not emit `LXI SP`. This is what lets one binary run at every tape length (`decisions.md` B6, B14). The value is published at `TOS_META_SP_INIT`.
 - The loader also resets the tape selection to 0.
 - A program ends with `HLT`. In RUNNING state that reloads the shell (transition 5) and does **not** halt the machine; `halt_reason` 1 is reserved and never written.
 - tiny-C images begin with `CALL main ; HLT`, then code, then globals in declaration order.

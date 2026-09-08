@@ -22,7 +22,7 @@ export function clampSpeed(x: number): number {
 /**
  * Step budget for one frame of `dtMs` milliseconds at `speed`.
  * Numeric speeds return `speed * dtMs / 1000` (fractional; the caller accumulates the remainder
- * so that 1 step/s really is one step per second). 'max' returns Number.MAX_SAFE_INTEGER — the
+ * so that 1 step/s really is one step per second). 'max' returns Number.MAX_SAFE_INTEGER, the
  * caller must bound it by wall-clock time (MAX_FRAME_MS) instead.
  */
 export function stepsForFrame(speed: Speed, dtMs: number): number {

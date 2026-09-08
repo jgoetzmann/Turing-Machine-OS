@@ -31,32 +31,32 @@ Tests: WS4-01a, WS4-01b, WS6-05, WS6-08.
 
 L ∈ {32K, 48K, 64K}. Only `0x0000–0x3FFF` is fixed. The banked window ends at `L − 0x2001`, scratch at `L − 0x1001`, the stack at `L − 0x201` (the loader sets SP there), the display at `L − 0x101` and the metadata block at `L − 1`. `IN 05H` returns `(L / 256) & 0xFF` so a program can find the top of its own tape; the shell's `mem` command prints the map for the running length.
 
-An access at or beyond L is a **tape fault**: reads return `0xFF`, writes are dropped, and the kernel halts with reason 4 after the current instruction. `demos/fault/fault.c` walks writes upward from `0x4000` until this happens — on a 32K tape it faults; on 64K it reaches the metadata block and returns to the shell.
+An access at or beyond L is a **tape fault**: reads return `0xFF`, writes are dropped, and the kernel halts with reason 4 after the current instruction. `demos/fault/fault.c` walks writes upward from `0x4000` until this happens. On a 32K tape it faults; on 64K it reaches the metadata block and returns to the shell.
 
 Tests: WS4-02a, WS6-09; the shell and every demo run at 32K.
 
 ## 2. Clock (`HZ`)
 
-The nominal 8080 clock in cycles per second, using real per-opcode cycle counts (`cpu_opcode_cycles`, Intel's table). `0` means unthrottled. The native `kernel_run` sleeps so that `cycles` advance at this rate — `--hz=2000000` runs at the speed of an original 2 MHz 8080. `kernel_step` itself never sleeps, so the browser is unaffected: there the run loop uses the separate `speed` setting below. The value is published at meta `0x31`.
+The nominal 8080 clock in cycles per second, using real per-opcode cycle counts (`cpu_opcode_cycles`, Intel's table). `0` means unthrottled. The native `kernel_run` sleeps so that `cycles` advance at this rate: `--hz=2000000` runs at the speed of an original 2 MHz 8080. `kernel_step` itself never sleeps, so the browser is unaffected: there the run loop uses the separate `speed` setting below. The value is published at meta `0x31`.
 
 Tests: WS4-03.
 
 ### Playground speed (`speed=`)
 
-Not a machine lever — a run-loop budget. `speed=<steps per second>` or `speed=max`. At `max` the page runs the machine for up to 8 ms per animation frame; at 60 or below every head move is visible on the strip. `web/src/speed.ts` (`stepsForFrame(speed, dtMs)`) computes the per-frame budget.
+This is a run-loop budget, not a machine lever. `speed=<steps per second>` or `speed=max`. At `max` the page runs the machine for up to 8 ms per animation frame; at 60 or below every head move is visible on the strip. `web/src/speed.ts` (`stepsForFrame(speed, dtMs)`) computes the per-frame budget.
 
 ## 3. PRNG seed (`SEED`)
 
 Seeds the BIOS `RAND` (0x07) generator, an 8-bit xorshift (`x ^= x << 3; x ^= x >> 5; x ^= x << 1`) whose exact
 shifts are fixed by `bios.h`. Seed 0 behaves as seed 1 so the generator never sticks at zero. That triple cycles
 after 17 draws, so `RAND` is a source of variety, not of statistical randomness: expect a visible pattern if a
-program leans on it heavily. With the same seed and the same input log, Pong serves in the same direction and Life's random preset is the same board every run — determinism (WS1-16) depends on it.
+program leans on it heavily. With the same seed and the same input log, Pong serves in the same direction and Life's random preset is the same board every run; determinism (WS1-16) depends on it.
 
 Tests: WS4-05.
 
 ## 4. Input mode (`INPUT_MODE`)
 
-Both input paths always exist: parked console reads (`CONIN`, `READLINE`, `CONST`) and polled keys (`IN 03H`). The lever tells the UI where keystrokes go — to the console (typed into the shell) or to the key bitmask (games). It is recorded at meta `0x35` and changes nothing inside the machine. For reproducible runs the native binary takes `--stdin-script=<file>`, whose bytes are fed as console input followed by EOF.
+Both input paths always exist: parked console reads (`CONIN`, `READLINE`, `CONST`) and polled keys (`IN 03H`). The lever tells the UI where keystrokes go: to the console (typed into the shell) or to the key bitmask (games). It is recorded at meta `0x35` and changes nothing inside the machine. For reproducible runs the native binary takes `--stdin-script=<file>`, whose bytes are fed as console input followed by EOF.
 
 ## 5. Disks (`DISKS`)
 
@@ -78,9 +78,9 @@ Tests: WS1-10.
 
 ## Counters that are not levers
 
-- **Head-travel odometer.** `mem_travel()` = Σ |addr<sub>i</sub> − addr<sub>i−1</sub>| over every read and write since `mem_init`; `mem_accesses()` counts them; `mem_cells_written()` counts distinct cells with a write age. Shown in the Stats panel; the 1-tape vs 2-tape palindrome demo compares the two odometers. Reset with the machine. Test: WS4-08.
-- **Steps, cycles, frames, syscalls.** `tos_steps`, `tos_cycles_lo/hi`, `tos_frame`, `tos_last_syscall`.
-- **Breakpoints.** `bp=<kind:lo:hi,…>` in the URL, `tos_bp_add(kind, lo, hi)` in C, where kind is 0 PC, 1 READ, 2 WRITE, 3 SYSCALL, 4 STATE. A hit pauses the run loop without halting the machine.
+- `mem_travel()` is the head-travel odometer, Σ |addr<sub>i</sub> − addr<sub>i−1</sub>| over every read and write since `mem_init`; `mem_accesses()` counts them; `mem_cells_written()` counts distinct cells with a write age. Shown in the Stats panel; the 1-tape vs 2-tape palindrome demo compares the two odometers. Reset with the machine. Test: WS4-08.
+- The step, cycle, frame and syscall counters are `tos_steps`, `tos_cycles_lo/hi`, `tos_frame`, `tos_last_syscall`.
+- Breakpoints are `bp=<kind:lo:hi,…>` in the URL and `tos_bp_add(kind, lo, hi)` in C, where kind is 0 PC, 1 READ, 2 WRITE, 3 SYSCALL, 4 STATE. A hit pauses the run loop without halting the machine.
 
 ## Playground URL
 

@@ -1,6 +1,6 @@
 # Status
 
-TuringOS 2.0.0. One C99 core, built natively (`make`) and to WebAssembly (`make wasm`); the site at <https://jgoetzmann.github.io/Turing-Machine-OS/> boots the same machine. This page says what runs where, what is tested, and where the edges are. Nothing on it is aspirational — the plan lives in `v2-roadmap.md`.
+TuringOS 2.0.0. One C99 core, built natively (`make`) and to WebAssembly (`make wasm`); the site at <https://jgoetzmann.github.io/Turing-Machine-OS/> boots the same machine. This page says what runs where, what is tested, and where the edges are. Nothing on it is aspirational; the plan lives in `v2-roadmap.md`.
 
 ## What runs where
 
@@ -29,7 +29,7 @@ The compilers are ROM services by design (`decisions.md` A7, `languages.md`); a 
 ## Tests
 
 - `make test` builds everything and runs `tests/run_tests.sh`: every `tests/**/test_*.c` compiled standalone against `build/libtos.a`, plus every `tests/**/*.sh`. It prints `PASS: <name>` per test and `N/N passed` at the end, and exits non-zero on any failure.
-- **Counts.** `make test` runs 81 tests (42 C files and 39 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 55 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
+- `make test` runs 81 tests (42 C files and 39 shell tests); `make test-web` runs 63 Node tests over the wasm; `make test-e2e` runs 55 Cypress tests in a headless browser. The v2 spec lists 60 behavior ids (`WSn-mm`); every one is cited by at least one test.
 - `make test-web` runs `web/test/*.test.mjs` with `node --test` against the real wasm: boot, a shell session (`dir`, `cc`, `run`, `halt`), every demo's `.expected` output, and `layout.json` against the wasm's actual struct offsets.
 - `make test-e2e` builds the site and drives it with Cypress: the thirteen panels mount and draw, the toolbar
   runs, steps, resets and reports, breakpoints fire, time travel seeks, the levers rebuild the machine without

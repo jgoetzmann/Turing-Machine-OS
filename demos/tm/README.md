@@ -18,7 +18,6 @@ then each TM tape from the leftmost to the rightmost visited cell, blanks
 trimmed at both ends, then `steps=N`. The tests use the inputs `abba` ->
 `yes` and `abca` -> `no`; edit the `input:` line to try others.
 
-What to watch: the busy beavers are pure head motion; watch the travel
-counter. `pal1` is quadratic in the input length, `pal2`
-linear: on a 32-character palindrome the one-tape run travels more than
-twice as far.
+The busy beavers are pure head motion, so watch the travel counter.
+`pal1` is quadratic in the input length and `pal2` is linear: on a
+32-character palindrome the one-tape run travels more than twice as far.

@@ -208,7 +208,7 @@ function loadFactory(url: string): Promise<ModuleFactory> {
       s.src = url;
       s.async = true;
       s.onload = () => resolve();
-      s.onerror = () => reject(new Error(`could not load ${url} — run \`make wasm\` first`));
+      s.onerror = () => reject(new Error(`could not load ${url}: run \`make wasm\` first`));
       document.head.appendChild(s);
     });
     if (typeof g.createTuringOS !== 'function') {

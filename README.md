@@ -3,7 +3,7 @@
 [![CI](https://github.com/jgoetzmann/Turing-Machine-OS/actions/workflows/ci.yml/badge.svg)](https://github.com/jgoetzmann/Turing-Machine-OS/actions/workflows/ci.yml)
 [![Pages](https://github.com/jgoetzmann/Turing-Machine-OS/actions/workflows/pages.yml/badge.svg)](https://github.com/jgoetzmann/Turing-Machine-OS/actions/workflows/pages.yml)
 
-An operating system that is literally a Turing machine. The tape is a byte array; the head is an Intel 8080's program counter; the finite control is a six-state kernel; the only door to the outside world is one host abstraction layer. You can watch every head move, every state transition and every tape cell change — natively in a terminal, or in your browser, where the same C core runs as WebAssembly.
+An operating system that is literally a Turing machine. The tape is a byte array; the head is an Intel 8080's program counter; the finite control is a six-state kernel; the only door to the outside world is one host abstraction layer. You can watch every head move, every state transition and every tape cell change, natively in a terminal or in your browser, where the same C core runs as WebAssembly.
 
 **Live:** <https://jgoetzmann.github.io/Turing-Machine-OS/>
 
@@ -11,10 +11,10 @@ An operating system that is literally a Turing machine. The tape is a byte array
 
 ## What is in the box
 
-- **An 8080 machine on k tapes.** 1, 2 or 4 tapes of 32K, 48K or 64K; a banked window per tape; real cycle counts; every opcode. Accesses past the end of the tape fault, and you can watch it happen.
-- **A kernel that is a finite state machine.** Six states, twelve transitions, all counted, all breakable, all drawn from the same table the code uses.
+- **An 8080 machine on k tapes.** There are 1, 2 or 4 tapes of 32K, 48K or 64K, with a banked window per tape, real cycle counts and every opcode. Accesses past the end of the tape fault, and you can watch it happen.
+- **A kernel that is a finite state machine.** Six states and twelve transitions, counted and breakable, taken from the same table the code uses.
 - **A shell that runs on the emulated CPU**, written in the project's own C subset and compiled by the project's own compiler. `cc SHELL.C` inside the OS reproduces `shell.com` byte for byte.
-- **Four languages.** tiny-C, 8080 assembly, a Turing-machine description language (a TM running on the TM), and Brainfuck — all compile to `.com` images. Plus a Forth interpreter that runs inside the machine.
+- **Four languages.** tiny-C, 8080 assembly, a Turing-machine description language (a TM running on the TM), and Brainfuck. All four compile to `.com` images. There is also a Forth interpreter that runs inside the machine.
 - **Demos.** Pong and Life on a 64×32 memory-mapped display, Busy Beavers, a 1-tape vs 2-tape palindrome checker with head-travel odometers, and a program that walks off the end of the tape.
 - **Time travel.** Snapshots plus an input log make every run deterministic and seekable to any step.
 
@@ -22,7 +22,7 @@ An operating system that is literally a Turing machine. The tape is a byte array
 
 ```sh
 make test        # build the native binary and tools, run the C and shell test suites
-make run         # boot the OS in this terminal — try `help`, `dir`, `halt` at the A> prompt
+make run         # boot the OS in this terminal: try `help`, `dir`, `halt` at the A> prompt
 make web         # WebAssembly + site into web/dist (needs Emscripten 6.0.9 and Node >= 22)
 make test-web    # Node tests over the wasm build
 make test-e2e    # drive the site in a headless browser with Cypress
@@ -65,10 +65,10 @@ Native flags: `build/turingos [--tapes=1|2|4] [--len=32768|49152|65536] [--hz=N]
 
 ## Documentation
 
-- [Architecture](docs/architecture.md) — the TM mapping, memory map, FSM, ports, syscalls, disk and `.com` formats, generated constants.
-- [Levers](docs/levers.md) — tape count, tape length, clock, seed, input mode, disks, trace, snapshots.
+- [Architecture](docs/architecture.md): the TM mapping, memory map, FSM, ports, syscalls, disk and `.com` formats, generated constants.
+- [Levers](docs/levers.md): tape count, tape length, clock, seed, input mode, disks, trace, snapshots.
 - [Languages](docs/languages.md), [tiny-C](docs/tiny-c.md), [8080 assembler](docs/asm.md), [TM language](docs/tm.md).
-- [Design decisions](docs/decisions.md) — every choice with its context, consequences and rejected alternatives, including where this is not a pure Turing machine and why.
+- [Design decisions](docs/decisions.md): every choice with its context, consequences and rejected alternatives, including where this is not a pure Turing machine and why.
 - [How it was built](docs/how-it-was-built.md), [Status](docs/status.md), and the [v2 roadmap](docs/v2-roadmap.md) it was built from.
 
 ## Contributing

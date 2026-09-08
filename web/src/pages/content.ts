@@ -43,7 +43,7 @@ export function renderContentPage(mount: HTMLElement, _ctx: AppContext, slug: st
   const foot = document.createElement('p');
   foot.className = 'doc-source';
   const sha = typeof __BUILD_SHA__ === 'string' ? __BUILD_SHA__ : 'main';
-  foot.innerHTML = `Source: <a rel="noopener" target="_blank"></a> — the site renders the same Markdown that GitHub shows.`;
+  foot.innerHTML = `Source: <a rel="noopener" target="_blank"></a>. The site renders the same Markdown that GitHub shows.`;
   const link = foot.querySelector('a')!;
   link.href = `${REPO}/blob/${sha === 'dev' ? 'main' : sha}/docs/${slug}.md`;
   link.textContent = `docs/${slug}.md`;

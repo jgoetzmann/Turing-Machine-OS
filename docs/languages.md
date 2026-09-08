@@ -1,6 +1,6 @@
 # Languages
 
-TuringOS speaks four languages, and each of them compiles to the same thing: a flat 8080 `.com` image loaded at `0x0100`. Two more things run on the machine without a compiler of their own — the shell and a Forth interpreter, both written in tiny-C.
+TuringOS speaks four languages, and each of them compiles to the same thing: a flat 8080 `.com` image loaded at `0x0100`. Two more things run on the machine without a compiler of their own: the shell and a Forth interpreter, both written in tiny-C.
 
 ## What runs where
 
@@ -8,16 +8,16 @@ This is the honest split (`decisions.md` A7): the *tools* that turn source into 
 
 | Thing | Runs on | How it is reached |
 |---|---|---|
-| tiny-C compiler (`cc`) | host — ROM service (BIOS 0x16) | `cc F` in the shell, `build/cc_driver`, `tos_compile(0, …)`, editor |
-| 8080 assembler (`asm`) | host — ROM service (BIOS 0x1A) | `asm F`, `build/asm`, `tos_compile(1, …)`, editor |
-| TM language compiler (`tm`) | host — ROM service (BIOS 0x1B) | `tm F`, `build/tmc`, `tos_compile(2, …)`, editor |
-| Brainfuck compiler (`bf`) | host — ROM service (BIOS 0x1C) | `bf F`, `build/bfc`, `tos_compile(3, …)`, editor |
+| tiny-C compiler (`cc`) | host, a ROM service (BIOS 0x16) | `cc F` in the shell, `build/cc_driver`, `tos_compile(0, …)`, editor |
+| 8080 assembler (`asm`) | host, a ROM service (BIOS 0x1A) | `asm F`, `build/asm`, `tos_compile(1, …)`, editor |
+| TM language compiler (`tm`) | host, a ROM service (BIOS 0x1B) | `tm F`, `build/tmc`, `tos_compile(2, …)`, editor |
+| Brainfuck compiler (`bf`) | host, a ROM service (BIOS 0x1C) | `bf F`, `build/bfc`, `tos_compile(3, …)`, editor |
 | The shell | **the 8080** | `src/shell/shell_tpa.c`, tiny-C, embedded at boot |
 | Forth | **the 8080** | `demos/forth/forth.c`, tiny-C, runs in the TPA |
 | Every demo | **the 8080** | `demos/**`, compiled by the tools above |
 | The compiled TM / BF program | **the 8080** | the `.com` the tool produced |
 
-Why: a C compiler that runs *inside* 16 KB on an 8080 is a project in itself, and the 8080 already has plenty to do. From the machine's point of view the compilers are firmware — a fixed function reached by one `OUT 01H`, like a ROM routine. The shell compiling itself (`cc SHELL.C` → a byte-identical `SHELL.COM`) is the proof that the loop closes. Self-hosting `cc` stays a stretch goal.
+Why: a C compiler that runs *inside* 16 KB on an 8080 is a project in itself, and the 8080 already has plenty to do. From the machine's point of view the compilers are firmware: a fixed function reached by one `OUT 01H`, like a ROM routine. The shell compiling itself (`cc SHELL.C` → a byte-identical `SHELL.COM`) is the proof that the loop closes. Self-hosting `cc` stays a stretch goal.
 
 In the shell, a compile command reads `NAME.EXT` from the selected disk, writes `NAME.COM` (overwriting) and flushes the image; on error it prints the tool's diagnostic and writes nothing. `run NAME.COM` loads it into the TPA and executes it.
 

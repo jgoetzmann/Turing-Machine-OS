@@ -1,6 +1,6 @@
-# 8080 Assembler
+# 8080 assembler
 
-`asm_assemble` (`src/lang/asm.c`) turns 8080 assembly source into a flat `.com` image. It is a host tool — a ROM service like the C compiler — reachable as `asm F` in the shell (BIOS 0x1A, `F.ASM` → `F.COM`), as `build/asm <in.asm> <out.com>` on the host, as `tos_compile(TOS_LANG_ASM, …)` and from the playground editor. `build/disasm` is its inverse, and `disasm` output re-assembles to identical bytes for all 256 opcodes.
+`asm_assemble` (`src/lang/asm.c`) turns 8080 assembly source into a flat `.com` image. It is a host tool, a ROM service like the C compiler. You can reach it as `asm F` in the shell (BIOS 0x1A, `F.ASM` → `F.COM`), as `build/asm <in.asm> <out.com>` on the host, as `tos_compile(TOS_LANG_ASM, …)` and from the playground editor. `build/disasm` is its inverse, and `disasm` output re-assembles to identical bytes for all 256 opcodes.
 
 ## Source format
 
@@ -90,7 +90,7 @@ done:   HLT
 msg:    DB 'HELLO FROM ASM',0AH,0
 ```
 
-`build/asm demos/asm/hello.asm out.com` then `run` prints `HELLO FROM ASM`. Talking to the machine from assembly is the same as from C: function id in A, argument in C or DE, `OUT 01H`; `OUT 02H` selects a tape; `IN 03H..05H` read keys, tape count and tape length (see `architecture.md` §6–7).
+`build/asm demos/asm/hello.asm out.com` then `run` prints `HELLO FROM ASM`. Talking to the machine from assembly is the same as from C: function id in A, argument in C or DE, `OUT 01H`; `OUT 02H` selects a tape; `IN 03H..05H` read keys, tape count and tape length (see `architecture.md` §6-7).
 
 ## Disassembler
 

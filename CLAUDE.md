@@ -1,16 +1,16 @@
-# CLAUDE.md — working rules for TuringOS
+# CLAUDE.md: working rules for TuringOS
 
-TuringOS is an operating system that *is* a Turing machine: an Intel 8080 head on 1–4 byte tapes,
+TuringOS is an operating system that *is* a Turing machine: an Intel 8080 head on 1-4 byte tapes,
 a six-state kernel, a BIOS behind `OUT 01H`, and one host abstraction layer. One C99 core builds
 natively and to WebAssembly; the site under `web/` runs the real machine.
 
 ## Commands
 
-- `make test` — build everything, run every C and shell test. Run it before calling anything done.
-- `make test-web` — Node tests over the wasm build (needs Emscripten 6.0.9 and Node >= 22).
-- `make test-e2e` — Cypress drives the built site in a headless browser (needs `npm ci` in `web/`).
-- `make web` — wasm + demo disk + generated JSON + `npm ci && npm run build` in `web/`.
-- `make run` — boot the OS in this terminal. `make help` lists every target.
+- `make test`: build everything, run every C and shell test. Run it before calling anything done.
+- `make test-web`: Node tests over the wasm build (needs Emscripten 6.0.9 and Node >= 22).
+- `make test-e2e`: Cypress drives the built site in a headless browser (needs `npm ci` in `web/`).
+- `make web`: wasm + demo disk + generated JSON + `npm ci && npm run build` in `web/`.
+- `make run`: boot the OS in this terminal. `make help` lists every target.
 - Single test: `cc -std=c99 -Wall -Wextra -Werror -pedantic -I./src tests/<area>/test_x.c build/libtos.a -o build/tests/x && build/tests/x`.
 
 ## Hard constraints (the Turing-machine mapping)
@@ -29,7 +29,7 @@ natively and to WebAssembly; the site under `web/` runs the real machine.
 - C99 with `-std=c99 -Wall -Wextra -Werror -pedantic`. No VLAs, no GNU extensions, no C11.
 - Programs are flat `.com` images at `0x0100`. The loader sets SP; compilers never emit `LXI SP`.
 - Tapes are 1, 2 or 4 × 32K/48K/64K; only `0x4000 … L−0x2001` is per-tape. Regions above the TPA are
-  anchored to the top of the tape — never hard-code `0xFE00` or `0xFF00` in new code.
+  anchored to the top of the tape. Never hard-code `0xFE00` or `0xFF00` in new code.
 
 ## Where things are
 
@@ -55,13 +55,13 @@ Docs: `docs/architecture.md` (what is), `docs/decisions.md` (why), `docs/levers.
   `web/cypress/e2e/*.cy.js`, one file per area, asserting what the user sees.
 - Every behavior id (`WSn-mm`) in the spec has at least one test that cites it.
 - The constants table in `docs/architecture.md` is `build/dump_constants --markdown` output; a test
-  compares them. Change `src/tos.h`, then regenerate — never hand-edit the table.
+  compares them. Change `src/tos.h`, then regenerate. Never hand-edit the table.
 
 ## Commit conventions
 
 - Imperative subject, at most 72 characters; the body says *why*.
 - **No `Co-Authored-By`, `Generated-by`, session links, or any other tool or AI attribution trailers
-  in commit messages or pull requests — ever.**
+  in commit messages or pull requests, ever.**
 - `make test` is green for every commit on `main`. Squash work-in-progress before it lands.
 - Any change to a port, syscall, memory-map region, file format, the HAL or the JS API appends an
   entry (Context / Decision / Consequences / Alternatives) to `docs/decisions.md` in the same commit.

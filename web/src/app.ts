@@ -740,7 +740,7 @@ export class App {
   // ---- machine housekeeping --------------------------------------------------
 
   /** Run the shell from boot to its first prompt (bounded). Returns false when a breakpoint or a
-   *  halt interrupted the boot — the stop has then been handled (paused + noted) and callers must
+   *  halt interrupted the boot. The stop has then been handled (paused + noted) and callers must
    *  not switch back to run mode. */
   bootToPrompt(): boolean {
     for (let i = 0; i < 64; i++) {

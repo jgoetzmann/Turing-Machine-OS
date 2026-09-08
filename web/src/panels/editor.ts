@@ -172,7 +172,7 @@ export function createEditorPanel(root: HTMLElement, engine: Engine, bus: Bus): 
       ok = false;
     }
     if (!ok) {
-      setStatus(`compiled ${fmtInt(bytes.length)} bytes but loadCom failed (too large for the TPA, or machine halted — reset it)`, 'tos-err');
+      setStatus(`compiled ${fmtInt(bytes.length)} bytes but loadCom failed (too large for the TPA, or the machine is halted: reset it)`, 'tos-err');
       return;
     }
     setStatus(`running ${fileName()} (${fmtInt(bytes.length)} bytes)`, 'tos-ok');

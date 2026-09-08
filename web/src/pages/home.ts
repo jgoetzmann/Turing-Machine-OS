@@ -34,7 +34,7 @@ export function renderHomePage(mount: HTMLElement, ctx: AppContext): Page {
       <div class="hero-copy">
         <p class="eyebrow">TuringOS v2</p>
         <h1 id="hero-title">A computer built like a Turing machine.</h1>
-        <p class="lead">One C99 core: an Intel 8080 reads and writes a tape, a finite-state kernel decides what happens next, and a tiny CP/M-style shell boots on top. The same code runs natively and — right here — as WebAssembly.</p>
+        <p class="lead">One C99 core: an Intel 8080 reads and writes a tape, a finite-state kernel decides what happens next, and a small CP/M-style shell boots on top. The same code runs natively, and right here as WebAssembly.</p>
         <p class="hero-actions">
           <a class="btn btn-primary" href="#/playground">Open playground</a>
           <a class="btn" href="#/architecture">Read the architecture</a>

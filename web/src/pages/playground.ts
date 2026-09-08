@@ -92,7 +92,7 @@ export function renderPlaygroundPage(mount: HTMLElement, ctx: AppContext, route:
           <dt><kbd>W</kbd> <kbd>S</kbd> <kbd>↑</kbd> <kbd>↓</kbd> <kbd>Space</kbd> <kbd>Esc</kbd> <kbd>Enter</kbd></dt>
           <dd>Machine keys (IN 0x03) while the display has focus or the input lever is <em>keys</em></dd>
         </dl>
-        <p>Typing in the console panel sends bytes to the machine's console input. Levers marked <em>machine</em> reset the machine; <em>view</em> levers apply live. The URL hash always reflects the current levers, demo, speed and breakpoints — copy it to share.</p>
+        <p>Typing in the console panel sends bytes to the machine's console input. Levers marked <em>machine</em> reset the machine; <em>view</em> levers apply live. The URL hash always reflects the current levers, demo, speed and breakpoints, so copy it to share.</p>
         <button type="button" class="btn btn-primary" data-act="help-close">Close</button>
       </div>
     </div>`;
@@ -431,7 +431,7 @@ export function renderPlaygroundPage(mount: HTMLElement, ctx: AppContext, route:
       const lo = parseAddress(bpLo.value);
       const hi = bpHi.value.trim() === '' ? lo : parseAddress(bpHi.value);
       if (lo === null || hi === null) {
-        a.note('Breakpoint: enter hex — an address like 0100, a syscall id like 17, or a state 0-5');
+        a.note('Breakpoint: enter hex, an address like 0100, a syscall id like 17, or a state 0-5');
         bpLo.focus();
         return;
       }

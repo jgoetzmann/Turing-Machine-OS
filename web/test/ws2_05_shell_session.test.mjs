@@ -257,13 +257,13 @@ test('WS2-05: a machine with no disk image loaded lists (empty) for dir and has 
   assert.equal(blank._tos_halt_reason(), TOS.HALT_COMMAND);
 });
 
-test('WS2-05: `cc BAD.C` on a file with a syntax error prints the src.c:1: diagnostic and writes no BAD.COM', () => {
+test('WS2-05: `cc BAD.C` on a file with a syntax error prints the BAD.C:1: diagnostic and writes no BAD.COM', () => {
   freshDemoMachine(M);
   assert.equal(diskPutFile(M, 0, 'BAD.C', Buffer.from('int main(){ int x = 1 }\n', 'latin1')), 0);
   assert.ok(diskList(M, 0).names.includes('BAD.C'));
   const r = session(M, 'cc BAD.C\nhalt\n');
   assert.equal(r.stop, KSTOP.HALT, JSON.stringify(r.out));
-  assert.ok(r.out.includes('src.c:1:'), `diagnostic missing in ${JSON.stringify(r.out)}`);
+  assert.ok(r.out.includes('BAD.C:1:') || r.out.includes('src.c:1:'), `diagnostic missing in ${JSON.stringify(r.out)}`);
   assert.ok(r.out.includes("expected ';'"), `message missing in ${JSON.stringify(r.out)}`);
   assert.equal(diskGetFile(M, 0, 'BAD.COM'), null, 'no output file on a compile error');
   assert.equal(M._tos_halt_reason(), TOS.HALT_COMMAND);

@@ -78,7 +78,10 @@ static int t_bf_cells_on_tape1(void) {
     len = bf_compile(g_src, (uint32_t)n, g_img, sizeof g_img, g_err, sizeof g_err); ASSERT(len > 0);
     ASSERT(tos_load_com(g_img, (uint32_t)len) == 0);
     for (i = 0; i < 2000 && tos_state() != KS_SHELL; i++) (void)tos_step(100000u);
-    while ((ch = tos_con_pop()) >= 0 && o < 60) out[o++] = (char)ch; out[o] = 0;
+    while ((ch = tos_con_pop()) >= 0 && o < 60) {
+        out[o++] = (char)ch;
+    }
+    out[o] = 0;
     ASSERT(strncmp(out, "Hello World!\n", 13) == 0);
     for (i = 0; i < 16; i++) { nz1 += tos_tape_ptr(1)[0x4000 + i] != 0; nz0 += tos_tape_ptr(0)[0x4000 + i] != 0; }
     ASSERT(nz1 > 0);
